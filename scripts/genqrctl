@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# genqrctl — control the GenQR service. Installed to /usr/local/bin/genqrctl by install.sh.
+set -euo pipefail
+
+GENQR_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck source=lib.sh
+source "$GENQR_DIR/scripts/lib.sh"
+
+ORIG_ARGS=("$@")
+
+usage() {
+  cat <<EOF
+Usage: genqrctl <command> [options]
+
+Service
+  status                       Service state, version, database and health
+  start | stop | restart       Control the service
+  logs [-f] [journalctl opts]  Show (or follow) the service log
+
+Maintenance
+  update [--force]             Pull the latest version from GitHub and restart
+  reset-password <username>    Set a new password for a local user
+        [--unlock] [--must-change] [--password-stdin]
+  setup-token                  Show the first-launch setup token
+  backup <file>                Back up the SQLite database to <file>
+  migrate                      Apply database migrations
+  version                      Show version and commit
+
+Installed in: $GENQR_DIR
+EOF
+}
+
+need_root() { [ "$(id -u)" -eq 0 ] || exec sudo "$0" "${ORIG_ARGS[@]}"; }
+
+# CLI commands run as the service account so files they create keep the right owner.
+run_cli() {
+  if [ "$(id -u)" -ne 0 ] && [ "$(id -un)" != "$(app_user)" ]; then exec sudo "$0" "${ORIG_ARGS[@]}"; fi
+  as_app node server/dist/cli/index.js "$@"
+}
+
+status() {
+  local state since port health
+  state="$(systemctl show -p ActiveState --value "$GENQR_SERVICE")/$(systemctl show -p SubState --value "$GENQR_SERVICE")"
+  since="$(systemctl show -p ActiveEnterTimestamp --value "$GENQR_SERVICE")"
+  port="$(read_port)"
+  if curl -fsS --max-time 3 "http://127.0.0.1:${port}/api/health" > /dev/null 2>&1; then health="OK"; else health="NOT RESPONDING"; fi
+  echo "Service:  $GENQR_SERVICE $state${since:+ since $since}"
+  echo "Health:   $health (http://127.0.0.1:${port}/api/health)"
+  run_cli version | sed '1s/^/Version:  /; 2,$s/^/          /'
+  [ "$health" = "OK" ]
+}
+
+cmd="${1:-help}"
+[ $# -gt 0 ] && shift
+case "$cmd" in
+  status) need_root; status ;;
+  start | stop | restart)
+    need_root
+    systemctl "$cmd" "$GENQR_SERVICE"
+    if [ "$cmd" != "stop" ]; then
+      wait_healthy || die "Service did not become healthy; see: genqrctl logs"
+    fi
+    status || true
+    ;;
+  logs) journalctl -u "$GENQR_SERVICE" -n 200 --no-pager "$@" ;;
+  update) exec "$GENQR_DIR/scripts/update.sh" "$@" ;;
+  reset-password | setup-token | backup | migrate | version) run_cli "$cmd" "$@" ;;
+  help | -h | --help) usage ;;
+  *) usage; exit 1 ;;
+esac

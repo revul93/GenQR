@@ -1,0 +1,10 @@
+# Starts genqr-update.service when the web UI's "Update now" button drops a request file.
+[Unit]
+Description=Watch for GenQR update requests
+
+[Path]
+PathExists=@GENQR_DIR@/data/update.request
+Unit=genqr-update.service
+
+[Install]
+WantedBy=multi-user.target

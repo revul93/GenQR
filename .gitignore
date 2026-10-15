@@ -28,3 +28,7 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+
+# npm cache when the service user's HOME is the install dir
+.npm/
+.cache/

@@ -305,11 +305,13 @@ GenQR/
 | **7. Multi-DB** | Driver installer, switch wizard with data copy, CLI, CI tests on MySQL/PG/MSSQL |
 | **8. Hardening** | Security review, backups, docs, E2E tests |
 
+**Phase 1 status:** done for Linux. The Windows equivalents (`install.ps1`, `update.ps1`, `genqrctl.ps1`, plus a Windows Service and a Scheduled Task as the update trigger) move to Phase 8, since Linux is the primary target. On Windows the app already runs with `npm start`, and the CLI works via `npm run cli -- <command>`.
+
 Phase 7 comes late on purpose. Because Knex is used from day one and the tests run on all engines, the code is portable from the start. Only the switch wizard itself waits.
 
 ## 14. Remaining Open Questions
 
-1. **GitHub repository URL, and public or private?** A public repo makes the one-line installer work as written. A private repo needs a deploy key or a read-only token on each server, and the installer would take it as a parameter.
+1. **GitHub repository URL, and public or private?** The installer currently defaults to `https://github.com/revul93/GenQR` (taken from the local git identity). Please confirm or correct it. A public repo makes the one-line installer work as written. A private repo needs a deploy key or a read-only token on each server, and the installer would take it as a parameter.
 2. Defaults I'll use unless you say otherwise:
    - non-URL text gives a static QR code
    - IPs stored hashed only; GeoIP country lookup off by default

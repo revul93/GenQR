@@ -1,0 +1,4 @@
+{
+  "client": "sqlite",
+  "connection": { "filename": "data/genqr.db" }
+}

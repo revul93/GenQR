@@ -1,0 +1,23 @@
+# Installed by scripts/install.sh — @GENQR_DIR@ and @NODE_BIN@ are substituted at install time.
+[Unit]
+Description=GenQR - QR code generator and short-link service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@GENQR_USER@
+Group=@GENQR_USER@
+WorkingDirectory=@GENQR_DIR@
+Environment=NODE_ENV=production
+Environment=GENQR_ROOT=@GENQR_DIR@
+ExecStart=@NODE_BIN@ @GENQR_DIR@/server/dist/index.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
