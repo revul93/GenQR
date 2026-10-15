@@ -22,8 +22,18 @@ as_app() {
 
 # Install + build. Dev dependencies are needed to compile TypeScript and bundle the client.
 build_app() {
-  as_app npm ci --include=dev --no-audit --no-fund
-  as_app npm run build
+  as_app npm ci --include=dev --no-audit --no-fund --loglevel=error
+  as_app npm run build --silent
+}
+
+# Keep secrets, the database, logs and backups away from other local users.
+secure_files() {
+  local d
+  for d in data logs backups config; do
+    [ -d "$GENQR_DIR/$d" ] && chmod -R o-rwx,g-w "$GENQR_DIR/$d"
+  done
+  [ -f "$GENQR_DIR/.env" ] && chmod 600 "$GENQR_DIR/.env"
+  return 0
 }
 
 read_port() {

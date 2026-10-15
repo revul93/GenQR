@@ -102,6 +102,7 @@ fi
 
 info "Creating the database"
 as_app node server/dist/cli/index.js migrate
+secure_files
 
 info "Installing systemd services and the genqrctl command"
 install_units
