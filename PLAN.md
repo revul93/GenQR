@@ -333,6 +333,14 @@ GenQR/
 - **CSV export** for both views.
 - **Retention:** 13 months of detailed clicks by default (configurable). Older clicks roll up into daily totals, so the long-range charts keep working.
 
+**Phase 7 status:** done for SQLite, PostgreSQL and MySQL/MariaDB.
+- **Moving databases:** Settings → Database or `genqrctl db-switch`. GenQR installs the driver (versions pinned in `drivers.manifest.json`, installed into `drivers/`), tests the connection, then creates the schema in an empty target. It copies every table with its ids, checks row counts, saves the config (password encrypted) and restarts itself. Writes are paused during the copy.
+- **Safety:** if the new database fails at startup, GenQR goes back to the previous one. A failed switch removes the tables it created.
+- **Backups:** `genqrctl backup` writes a compressed JSON dump for any engine (still a file copy for SQLite), and `genqrctl restore` loads one back. The updater backs up and rolls back every engine.
+- **Tested end to end on Kali WSL with PostgreSQL 18 and MariaDB 11.8:** SQLite → PostgreSQL → SQLite → MariaDB → SQLite, plus backup/restore on MariaDB and the automatic fallback. Two real-database bugs were found and fixed along the way: the foreign-key column types on MariaDB, and cleanup after a failed switch.
+- **SQL Server** is implemented (Knex `mssql`/tedious, identity inserts, parameter limits) but hidden until it has been tested against a real server.
+- **Not yet exercised:** the updater's non-SQLite rollback (undoing migrations and restoring the dump).
+
 Phase 7 comes late on purpose. Because Knex is used from day one and the tests run on all engines, the code is portable from the start. Only the switch wizard itself waits.
 
 ## 14. Remaining Open Questions

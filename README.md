@@ -1,7 +1,7 @@
 # GenQR
 
 Branded QR code generator with editable short links and click analytics. Users sign in with local accounts or Active Directory.
-Built with Node.js, React and Knex (SQLite by default; MySQL, PostgreSQL and SQL Server are supported). See [PLAN.md](PLAN.md) for the full design and roadmap.
+Built with Node.js, React and Knex. It starts on SQLite and can move to PostgreSQL or MySQL/MariaDB from the admin settings. See [PLAN.md](PLAN.md) for the full design and roadmap.
 
 ## Install (Linux)
 
@@ -31,7 +31,10 @@ For production, put a reverse proxy with HTTPS in front of the app; [deploy/ngin
 | `genqrctl update [--force]` | Pull from GitHub, back up, build, migrate, restart (rolls back on failure) |
 | `genqrctl reset-password <user> [--unlock]` | Set a new password for a local user, e.g. the admin |
 | `genqrctl setup-token` | Show the first-launch setup token |
-| `genqrctl backup <file>` | Online backup of the SQLite database |
+| `genqrctl backup <file>` | Back up the database (SQLite file copy, or a `.json.gz` dump for any engine) |
+| `genqrctl restore <file>` | Replace all data with a backup (stops and restarts the service) |
+| `genqrctl db-status` | Database engine, driver and row counts |
+| `genqrctl db-switch --client pg\|mysql\|sqlite …` | Move all data to another empty database and switch to it (also in Settings → Database) |
 
 Admins can also update from **Admin → System → Update now**. That button drops a request file, and the `genqr-update.path` systemd unit picks it up and runs the same update script.
 
