@@ -309,6 +309,8 @@ GenQR/
 
 **Phase 2 status:** done. Local users, AD settings (with a test button and failover across several domain controllers), LDAP search/import, and AD sign-in (also accepting `DOMAIN\user` and `user@domain`) all work. Name and email are refreshed from AD at each sign-in. Still to do: the optional nightly job that disables users removed from AD. Ownership reassignment on delete arrives with QR codes in Phase 3.
 
+**Phase 3 status:** done. The designer offers colours, gradients, pattern and corner shapes, logos (a shared company library plus personal uploads; SVG uploads are rasterised to PNG), brand presets with a default, and a live preview with a **scan check** (the server decodes its own render). Codes are saved with history and search, can be downloaded as PNG/JPG/SVG/PDF/DOCX (PDF/DOCX at an exact printed size in cm) and printed at a chosen size. Deleting a user transfers their codes to another user. Note: until Phase 4, URL codes encode the target URL directly; Phase 4 switches new and existing URL codes to `/short/<code>` links.
+
 Phase 7 comes late on purpose. Because Knex is used from day one and the tests run on all engines, the code is portable from the start. Only the switch wizard itself waits.
 
 ## 14. Remaining Open Questions

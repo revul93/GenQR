@@ -13,6 +13,7 @@ import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
 import { adminUsersRouter } from './routes/adminUsers.js';
 import { adminSettingsRouter } from './routes/adminSettings.js';
+import { qrRouter } from './routes/qr.js';
 
 export function createApp(): express.Express {
   const app = express();
@@ -21,7 +22,8 @@ export function createApp(): express.Express {
   app.use(helmet());
 
   const api = express.Router();
-  api.use(express.json({ limit: '1mb' }));
+  // Large enough for a logo upload sent as a data URL.
+  api.use(express.json({ limit: '5mb' }));
   api.use(cookieParser());
   api.use(originCheck);
   api.use(sessionMiddleware);
@@ -32,6 +34,7 @@ export function createApp(): express.Express {
   });
   api.use('/setup', setupRouter);
   api.use('/auth', authRouter);
+  api.use('/qr', qrRouter);
   api.use('/admin/users', adminUsersRouter);
   api.use('/admin/settings', adminSettingsRouter);
   api.use('/admin', adminRouter);

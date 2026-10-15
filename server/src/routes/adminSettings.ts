@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { clientIp, parseBody } from '../http.js';
+import { clientIp, HttpError, parseBody } from '../http.js';
 import { requireAdmin } from '../auth/middleware.js';
 import { actorOf, audit } from '../services/audit.js';
 import { adConfigSchema, getAdConfig, saveAdConfig, testAdConfig } from '../services/activeDirectory.js';
+import { getUsableLogo } from '../services/logos.js';
+import { deletePreset, savePreset } from '../services/presets.js';
+import { qrStyleSchema } from '../qr/style.js';
 
 export const adminSettingsRouter = Router();
 adminSettingsRouter.use(requireAdmin);
@@ -31,4 +34,41 @@ adminSettingsRouter.put('/ad', async (req, res) => {
 adminSettingsRouter.post('/ad/test', async (req, res) => {
   const { bindPassword, testUsername, ...config } = parseBody(adTestSchema, req.body);
   res.json(await testAdConfig(config, bindPassword || undefined, testUsername || undefined));
+});
+
+// --- Branding presets ---------------------------------------------------------------
+
+const presetSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  style: qrStyleSchema,
+  logoId: z.number().int().positive().nullable().default(null),
+  isDefault: z.boolean().default(false),
+});
+
+const presetId = (raw: string | string[] | undefined) => {
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, 'Invalid id.');
+  return id;
+};
+
+adminSettingsRouter.post('/presets', async (req, res) => {
+  const body = parseBody(presetSchema, req.body);
+  if (body.logoId) await getUsableLogo(body.logoId, req.user!);
+  const preset = await savePreset(body, req.user!.id);
+  await audit({ actor: actorOf(req.user!), action: 'preset.created', entityType: 'preset', entityId: preset.id, details: { name: preset.name, isDefault: preset.isDefault }, ip: clientIp(req) });
+  res.status(201).json({ preset });
+});
+
+adminSettingsRouter.put('/presets/:id', async (req, res) => {
+  const body = parseBody(presetSchema, req.body);
+  if (body.logoId) await getUsableLogo(body.logoId, req.user!);
+  const preset = await savePreset(body, req.user!.id, presetId(req.params.id));
+  await audit({ actor: actorOf(req.user!), action: 'preset.updated', entityType: 'preset', entityId: preset.id, details: { name: preset.name, isDefault: preset.isDefault }, ip: clientIp(req) });
+  res.json({ preset });
+});
+
+adminSettingsRouter.delete('/presets/:id', async (req, res) => {
+  const preset = await deletePreset(presetId(req.params.id));
+  await audit({ actor: actorOf(req.user!), action: 'preset.deleted', entityType: 'preset', entityId: preset.id, details: { name: preset.name }, ip: clientIp(req) });
+  res.json({ ok: true });
 });

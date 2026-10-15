@@ -6,7 +6,9 @@ import { Layout } from './components/Layout';
 import { SetupPage } from './pages/SetupPage';
 import { LoginPage } from './pages/LoginPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
-import { HomePage } from './pages/HomePage';
+import { QrListPage } from './pages/QrListPage';
+import { QrDesignerPage } from './pages/QrDesignerPage';
+import { QrPrintPage } from './pages/QrPrintPage';
 import { SystemPage } from './pages/admin/SystemPage';
 import { AuditPage } from './pages/admin/AuditPage';
 import { UsersPage } from './pages/admin/UsersPage';
@@ -33,8 +35,11 @@ export function App() {
 
   return (
     <Routes>
+      <Route path="qr/:id/print" element={<QrPrintPage />} />
       <Route element={<Layout />}>
-        <Route index element={<HomePage />} />
+        <Route index element={<QrListPage />} />
+        <Route path="qr/new" element={<QrDesignerPage key="new" />} />
+        <Route path="qr/:id" element={<QrDesignerPage />} />
         <Route path="account/password" element={<ChangePasswordPage />} />
         <Route path="admin/users" element={<AdminOnly><UsersPage /></AdminOnly>} />
         <Route path="admin/settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />

@@ -20,6 +20,7 @@ import {
 import CheckCircle from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import { api, errorMessage } from '../../api';
+import { BrandingSettings } from './BrandingSettings';
 
 interface AdConfig {
   enabled: boolean;
@@ -218,8 +219,12 @@ export function SettingsPage() {
       <Paper>
         <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
           <Tab value="ad" label="Active Directory" />
+          <Tab value="branding" label="Branding" />
         </Tabs>
-        <Box sx={{ p: 3, maxWidth: 900 }}>{tab === 'ad' && <ActiveDirectorySettings />}</Box>
+        <Box sx={{ p: 3, maxWidth: 900 }}>
+          {tab === 'ad' && <ActiveDirectorySettings />}
+          {tab === 'branding' && <BrandingSettings />}
+        </Box>
       </Paper>
     </Stack>
   );

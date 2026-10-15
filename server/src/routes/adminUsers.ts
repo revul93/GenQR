@@ -7,10 +7,10 @@ import { requireAdmin } from '../auth/middleware.js';
 import { actorOf, audit } from '../services/audit.js';
 import { findAdUser, searchAdUsers } from '../services/activeDirectory.js';
 import { destroyUserSessions } from '../services/sessions.js';
+import { countOwned, reassignOwnership } from '../services/qrCodes.js';
 import {
   countActiveAdmins,
   createUser,
-  deleteUser,
   findUserById,
   findUserByUsername,
   listUsers,
@@ -182,7 +182,31 @@ adminUsersRouter.delete('/:id', async (req, res) => {
   const target = await loadUser(req);
   if (target.id === req.user!.id) throw new HttpError(409, 'You cannot delete your own account.', 'SELF_CHANGE');
   await guardLastAdmin(target, true);
-  await deleteUser(target.id);
-  await audit({ actor: actorOf(req.user!), action: 'user.deleted', entityType: 'user', entityId: target.id, details: { username: target.username, source: target.source, role: target.role }, ip: clientIp(req) });
-  res.json({ ok: true });
+
+  // QR codes keep working after their creator leaves: they move to another user.
+  const { reassignTo } = parseBody(z.object({ reassignTo: z.coerce.number().int().positive().optional() }), req.query);
+  const owned = await countOwned(target.id);
+  if (owned && !reassignTo) throw new HttpError(409, `${target.username} owns QR codes or logos. Choose a user to transfer them to.`, 'HAS_CONTENT');
+  const heir = reassignTo ? await findUserById(reassignTo) : null;
+  if (reassignTo && (!heir || heir.id === target.id)) throw new HttpError(400, 'Choose another existing user to receive the QR codes.', 'BAD_REASSIGN');
+
+  const moved = await db().transaction(async (trx) => {
+    const result = heir ? await reassignOwnership(target.id, heir.id, trx) : { qrCodes: 0, logos: 0 };
+    await trx('users').where({ id: target.id }).delete();
+    return result;
+  });
+  await audit({
+    actor: actorOf(req.user!),
+    action: 'user.deleted',
+    entityType: 'user',
+    entityId: target.id,
+    details: { username: target.username, source: target.source, role: target.role, ...(heir ? { reassignedTo: heir.username, ...moved } : {}) },
+    ip: clientIp(req),
+  });
+  res.json({ ok: true, moved });
+});
+
+adminUsersRouter.get('/:id/owned', async (req, res) => {
+  const target = await loadUser(req);
+  res.json({ count: await countOwned(target.id) });
 });

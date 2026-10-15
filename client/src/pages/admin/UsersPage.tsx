@@ -517,21 +517,71 @@ export function UsersPage() {
       <ImportDialog open={dialog === 'import'} onClose={() => setDialog(null)} onDone={done} />
       <EditDialog user={editing} onClose={() => setEditing(null)} onDone={done} />
       <ResetPasswordDialog user={resetting} onClose={() => setResetting(null)} onDone={done} />
-      <Dialog open={!!deleting} onClose={() => setDeleting(null)}>
-        <DialogTitle>Delete {deleting?.username}?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            The user is removed from GenQR and signed out. {deleting?.source === 'ad' ? 'Their Active Directory account is not affected; you can import them again later.' : ''} To
-            keep the account but block sign-in, disable it instead.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleting(null)}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={() => act(() => api.delete(`/admin/users/${deleting!.id}`), `"${deleting!.username}" deleted.`)}>
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <DeleteUserDialog
+        user={deleting}
+        users={users}
+        onClose={() => setDeleting(null)}
+        onDelete={(target, reassignTo) =>
+          act(
+            () => api.delete(`/admin/users/${target.id}${reassignTo ? `?reassignTo=${reassignTo}` : ''}`),
+            `"${target.username}" deleted.${reassignTo ? ` Their QR codes now belong to ${users.find((u) => u.id === reassignTo)?.username}.` : ''}`,
+          )
+        }
+      />
     </Stack>
+  );
+}
+
+function DeleteUserDialog({
+  user,
+  users,
+  onClose,
+  onDelete,
+}: {
+  user: ListUser | null;
+  users: ListUser[];
+  onClose(): void;
+  onDelete(user: ListUser, reassignTo: number | null): void;
+}) {
+  const [owned, setOwned] = useState<number | null>(null);
+  const [heir, setHeir] = useState<number | ''>('');
+  useEffect(() => {
+    setOwned(null);
+    setHeir('');
+    if (user) api.get<{ count: number }>(`/admin/users/${user.id}/owned`).then((r) => setOwned(r.count)).catch(() => setOwned(0));
+  }, [user]);
+  if (!user) return null;
+  const candidates = users.filter((u) => u.id !== user.id && u.isActive);
+
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Delete {user.username}?</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2}>
+          <DialogContentText>
+            The user is removed from GenQR and signed out. {user.source === 'ad' ? 'Their Active Directory account is not affected; you can import them again later.' : ''} To keep the account but
+            block sign-in, disable it instead.
+          </DialogContentText>
+          {!!owned && (
+            <>
+              <Alert severity="info">{user.username} owns QR codes or logos. They keep working and move to the user you choose.</Alert>
+              <TextField select label="Transfer QR codes to" value={heir} onChange={(e) => setHeir(Number(e.target.value))}>
+                {candidates.map((u) => (
+                  <MenuItem key={u.id} value={u.id}>
+                    {u.displayName} ({u.username})
+                  </MenuItem>
+                ))}
+              </TextField>
+            </>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button color="error" variant="contained" disabled={owned === null || (!!owned && heir === '')} onClick={() => onDelete(user, heir === '' ? null : heir)}>
+          Delete
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
