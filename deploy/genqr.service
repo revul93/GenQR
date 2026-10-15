@@ -12,7 +12,8 @@ WorkingDirectory=@GENQR_DIR@
 Environment=NODE_ENV=production
 Environment=GENQR_ROOT=@GENQR_DIR@
 ExecStart=@NODE_BIN@ @GENQR_DIR@/server/dist/index.js
-Restart=on-failure
+# Always: the app exits on purpose to restart itself (e.g. after a database switch)
+Restart=always
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true

@@ -16,6 +16,7 @@ import { adminSettingsRouter } from './routes/adminSettings.js';
 import { qrRouter } from './routes/qr.js';
 import { linksRouter } from './routes/links.js';
 import { statsRouter } from './routes/stats.js';
+import { adminDatabaseRouter, maintenanceGuard } from './routes/adminDatabase.js';
 import { shortRedirectRouter } from './routes/shortRedirect.js';
 
 export function createApp(): express.Express {
@@ -30,6 +31,7 @@ export function createApp(): express.Express {
   api.use(cookieParser());
   api.use(originCheck);
   api.use(sessionMiddleware);
+  api.use(maintenanceGuard);
 
   api.get('/health', async (_req, res) => {
     const { version, commit } = await getVersionInfo();
@@ -42,6 +44,7 @@ export function createApp(): express.Express {
   api.use('/links', linksRouter);
   api.use('/admin/users', adminUsersRouter);
   api.use('/admin/settings', adminSettingsRouter);
+  api.use('/admin/database', adminDatabaseRouter);
   api.use('/admin', adminRouter);
   api.use(() => {
     throw new HttpError(404, 'Not found.');

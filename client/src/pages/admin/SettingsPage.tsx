@@ -24,6 +24,7 @@ import { BrandingSettings } from './BrandingSettings';
 import { LinkSettings } from './LinkSettings';
 import { EmailSettings } from './EmailSettings';
 import { AnalyticsSettings } from './AnalyticsSettings';
+import { DatabaseSettings } from './DatabaseSettings';
 
 interface AdConfig {
   enabled: boolean;
@@ -226,6 +227,7 @@ export function SettingsPage() {
           <Tab value="links" label="Short links" />
           <Tab value="email" label="Email" />
           <Tab value="analytics" label="Analytics" />
+          <Tab value="database" label="Database" />
         </Tabs>
         <Box sx={{ p: 3, maxWidth: 900 }}>
           {tab === 'ad' && <ActiveDirectorySettings />}
@@ -233,6 +235,7 @@ export function SettingsPage() {
           {tab === 'links' && <LinkSettings />}
           {tab === 'email' && <EmailSettings />}
           {tab === 'analytics' && <AnalyticsSettings />}
+          {tab === 'database' && <DatabaseSettings />}
         </Box>
       </Paper>
     </Stack>

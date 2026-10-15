@@ -3,6 +3,7 @@ import path from 'node:path';
 import Module from 'node:module';
 import knex, { type Knex } from 'knex';
 import { CONFIG_DIR, DATA_DIR, DRIVERS_DIR, ROOT_DIR, ensureDir } from '../config.js';
+import { decryptSecret } from '../services/crypto.js';
 import { migrationSource } from './migrations/index.js';
 
 /**
@@ -16,10 +17,24 @@ import { migrationSource } from './migrations/index.js';
  */
 
 export type DbClient = 'sqlite' | 'mysql' | 'pg' | 'mssql';
+export const DB_CLIENTS: DbClient[] = ['sqlite', 'mysql', 'pg', 'mssql'];
+
+/** Server connection settings as stored in config/database.json (password kept separately, encrypted). */
+export interface ServerConnection {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  ssl: boolean;
+  /** Verify the server certificate when ssl is on. */
+  verifyCertificate: boolean;
+}
 
 export interface DbConfig {
   client: DbClient;
+  /** sqlite: { filename }; other engines: ServerConnection */
   connection: Record<string, unknown>;
+  passwordEnc?: string | null;
 }
 
 const KNEX_CLIENTS: Record<DbClient, string> = {
@@ -36,8 +51,20 @@ const DEFAULT_CONFIG: DbConfig = { client: 'sqlite', connection: { filename: 'da
 export function loadDbConfig(): DbConfig {
   if (!fs.existsSync(DB_CONFIG_FILE)) return DEFAULT_CONFIG;
   const cfg = JSON.parse(fs.readFileSync(DB_CONFIG_FILE, 'utf8')) as DbConfig;
-  if (!(cfg.client in KNEX_CLIENTS)) throw new Error(`Unsupported database client "${cfg.client}" in ${DB_CONFIG_FILE}`);
+  if (!DB_CLIENTS.includes(cfg.client)) throw new Error(`Unsupported database client "${cfg.client}" in ${DB_CONFIG_FILE}`);
   return cfg;
+}
+
+/** Writes config/database.json atomically (readable by the service account only). */
+export function writeDbConfig(cfg: DbConfig, file = DB_CONFIG_FILE): void {
+  ensureDir(path.dirname(file));
+  fs.writeFileSync(file + '.tmp', JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
+  fs.renameSync(file + '.tmp', file);
+}
+
+/** The configuration without secrets, for display. */
+export function describeDbConfig(cfg: DbConfig): { client: DbClient; connection: Record<string, unknown> } {
+  return { client: cfg.client, connection: cfg.connection };
 }
 
 // Drivers other than SQLite are installed on demand into drivers/ (outside the tracked
@@ -52,7 +79,19 @@ function registerDriversPath(): void {
   }
 }
 
-function buildKnexConfig(cfg: DbConfig): Knex.Config {
+function serverConnection(client: Exclude<DbClient, 'sqlite'>, c: ServerConnection, password: string): Record<string, unknown> {
+  const tls = c.ssl ? { rejectUnauthorized: c.verifyCertificate } : undefined;
+  switch (client) {
+    case 'mysql':
+      return { host: c.host, port: c.port, user: c.user, password, database: c.database, ssl: tls, charset: 'utf8mb4', supportBigNumbers: true, bigNumberStrings: true };
+    case 'pg':
+      return { host: c.host, port: c.port, user: c.user, password, database: c.database, ssl: tls ?? false };
+    case 'mssql':
+      return { server: c.host, port: c.port, user: c.user, password, database: c.database, options: { encrypt: c.ssl, trustServerCertificate: c.ssl && !c.verifyCertificate } };
+  }
+}
+
+export function buildKnexConfig(cfg: DbConfig, passwordOverride?: string): Knex.Config {
   if (cfg.client === 'sqlite') {
     const filename = path.resolve(ROOT_DIR, String(cfg.connection.filename ?? 'data/genqr.db'));
     ensureDir(path.dirname(filename));
@@ -72,16 +111,27 @@ function buildKnexConfig(cfg: DbConfig): Knex.Config {
       },
     };
   }
-  return { client: KNEX_CLIENTS[cfg.client], connection: cfg.connection, pool: { min: 0, max: 10 } };
+  const password = passwordOverride ?? (cfg.passwordEnc ? decryptSecret(cfg.passwordEnc) : '');
+  return {
+    client: KNEX_CLIENTS[cfg.client],
+    connection: serverConnection(cfg.client, cfg.connection as unknown as ServerConnection, password),
+    pool: { min: 0, max: 10 },
+    acquireConnectionTimeout: 20000,
+  };
+}
+
+/** A separate Knex instance, e.g. for the target of a database switch. */
+export function createKnex(cfg: DbConfig, passwordOverride?: string): Knex {
+  registerDriversPath();
+  return knex(buildKnexConfig(cfg, passwordOverride));
 }
 
 let instance: Knex | undefined;
 let activeClient: DbClient | undefined;
 
 export function initDb(cfg: DbConfig = loadDbConfig()): Knex {
-  registerDriversPath();
   ensureDir(DATA_DIR);
-  instance = knex(buildKnexConfig(cfg));
+  instance = createKnex(cfg);
   activeClient = cfg.client;
   return instance;
 }
@@ -95,9 +145,15 @@ export function dbClient(): DbClient {
   return activeClient ?? 'sqlite';
 }
 
-export async function migrateLatest(): Promise<string[]> {
-  const [, applied] = (await db().migrate.latest({ migrationSource })) as [number, string[]];
+export async function migrateLatest(conn: Knex = db()): Promise<string[]> {
+  const [, applied] = (await conn.migrate.latest({ migrationSource })) as [number, string[]];
   return applied;
+}
+
+/** Undoes the most recent batch of migrations (used when an update is rolled back). */
+export async function migrateRollback(conn: Knex = db()): Promise<string[]> {
+  const [, undone] = (await conn.migrate.rollback({ migrationSource })) as [number, string[]];
+  return undone;
 }
 
 export async function closeDb(): Promise<void> {

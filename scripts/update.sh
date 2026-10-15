@@ -69,8 +69,16 @@ rollback() {
   log "Rolling back to ${OLD_COMMIT:0:7}"
   write_status running "Rolling back: $reason"
   systemctl stop "$GENQR_SERVICE" || true
+  # Undo this update's migrations while the new code (which knows how) is still in place.
+  if [ "${MIGRATED:-0}" -eq 1 ] && [ ! -f "$BACKUP/genqr.db" ]; then
+    as_app node server/dist/cli/index.js migrate-rollback || log "Undoing the migrations failed"
+  fi
   as_app git reset --hard "$OLD_COMMIT" || true
   build_app || log "Rebuilding the previous version failed"
+  if [ -f "$BACKUP/genqr-dump.json.gz" ]; then
+    log "Restoring database contents from $BACKUP/genqr-dump.json.gz"
+    as_app node server/dist/cli/index.js restore "$BACKUP/genqr-dump.json.gz" || log "Restoring the dump failed"
+  fi
   if [ -f "$BACKUP/genqr.db" ]; then
     local dbfile; dbfile="$(sqlite_file)"
     log "Restoring database from $BACKUP/genqr.db"
@@ -99,9 +107,14 @@ if [ "$CONTINUE" -eq 1 ]; then
   write_status running "Building"
   build_app
 
+  log "Checking the database driver"
+  as_app node server/dist/cli/index.js install-driver
+
   log "Applying database migrations"
   write_status running "Migrating database"
-  as_app node server/dist/cli/index.js migrate
+  MIGRATE_OUT="$(as_app node server/dist/cli/index.js migrate)"
+  echo "$MIGRATE_OUT"
+  if [[ "$MIGRATE_OUT" == *"Applied migrations"* ]]; then MIGRATED=1; fi
 
   log "Updating systemd units and file permissions"
   install_units
@@ -174,8 +187,10 @@ cp -a "$GENQR_DIR/.env" "$GENQR_DIR/config" "$BACKUP/" 2> /dev/null || true
 DB_CLIENT="$(db_client)"
 if [ "$DB_CLIENT" = "sqlite" ]; then
   as_app node server/dist/cli/index.js backup "$BACKUP/genqr.db"
+elif as_app node server/dist/cli/index.js help | grep -q 'json.gz'; then
+  as_app node server/dist/cli/index.js backup "$BACKUP/genqr-dump.json.gz"
 else
-  warn "Automatic backup of $DB_CLIENT databases is not built in yet; make sure your DBA backups are current."
+  warn "This version cannot back up $DB_CLIENT databases; make sure your own database backups are current."
 fi
 
 trap 'rollback "Update step failed (line $LINENO)"' ERR

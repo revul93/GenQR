@@ -22,8 +22,16 @@ Maintenance
   reset-password <username>    Set a new password for a local user
         [--unlock] [--must-change] [--password-stdin]
   setup-token                  Show the first-launch setup token
-  backup <file>                Back up the SQLite database to <file>
+  backup <file>                Back up the database (SQLite: .db copy; any engine: .json.gz dump)
+  restore <file>               Replace all data with a backup (stops and restarts the service)
   migrate                      Apply database migrations
+
+Database
+  db-status                    Engine in use, driver, row counts
+  db-switch --client <mysql|pg|sqlite> --host H --port P --database D --user U [--ssl]
+                               Copy everything to another empty database and switch to it
+                               (stops the service, copies, starts it again)
+  install-driver               Install the driver for the configured database
   version                      Show version and commit
 
 Installed in: $GENQR_DIR
@@ -64,7 +72,16 @@ case "$cmd" in
     ;;
   logs) journalctl -u "$GENQR_SERVICE" -n 200 --no-pager "$@" ;;
   update) exec "$GENQR_DIR/scripts/update.sh" "$@" ;;
-  reset-password | setup-token | backup | migrate | version) run_cli "$cmd" "$@" ;;
+  reset-password | setup-token | backup | migrate | version | db-status | install-driver) run_cli "$cmd" "$@" ;;
+  restore | db-switch)
+    need_root
+    systemctl stop "$GENQR_SERVICE"
+    status_code=0
+    run_cli "$cmd" "$@" || status_code=$?
+    systemctl start "$GENQR_SERVICE"
+    wait_healthy || warn "GenQR did not report healthy yet; see: genqrctl logs"
+    exit "$status_code"
+    ;;
   help | -h | --help) usage ;;
   *) usage; exit 1 ;;
 esac

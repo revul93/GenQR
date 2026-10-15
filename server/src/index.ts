@@ -1,5 +1,8 @@
 import { env } from './config.js';
-import { closeDb, dbClient, initDb, migrateLatest } from './db/index.js';
+import { closeDb, dbClient, initDb, loadDbConfig, migrateLatest } from './db/index.js';
+import { installDriver } from './db/drivers.js';
+import { confirmSwitch, pendingSwitch, revertSwitch } from './db/switch.js';
+import { onShutdown } from './services/lifecycle.js';
 import { createApp } from './app.js';
 import { audit, SYSTEM_ACTOR } from './services/audit.js';
 import { purgeExpiredSessions } from './services/sessions.js';
@@ -8,10 +11,26 @@ import { ensureSetupToken, printSetupBanner, removeSetupToken } from './services
 import { getVersionInfo } from './services/system.js';
 import { countUsers } from './services/users.js';
 
+/** Opens the configured database; after a database switch, falls back to the previous one if the new one fails. */
+async function openDatabase(): Promise<string[]> {
+  try {
+    await installDriver(loadDbConfig().client, (line) => console.log(line));
+    initDb();
+    return await migrateLatest();
+  } catch (err) {
+    if (!pendingSwitch()) throw err;
+    console.error('The new database could not be opened; restoring the previous configuration.', err);
+    await closeDb();
+    revertSwitch(err as Error);
+    initDb();
+    return migrateLatest();
+  }
+}
+
 async function main(): Promise<void> {
-  initDb();
-  const applied = await migrateLatest();
+  const applied = await openDatabase();
   if (applied.length) console.log(`Applied migrations: ${applied.join(', ')}`);
+  confirmSwitch();
 
   if ((await countUsers()) === 0) printSetupBanner(ensureSetupToken(), env.port);
   else removeSetupToken();
@@ -31,7 +50,7 @@ async function main(): Promise<void> {
   setTimeout(retention, 60 * 1000).unref();
 
   const shutdown = (signal: string) => {
-    console.log(`${signal} received, shutting down`);
+    console.log(signal === 'restart' ? 'Restarting' : `${signal} received, shutting down`);
     clearInterval(purge);
     clearInterval(retentionTimer);
     server.close(() => {
@@ -41,6 +60,7 @@ async function main(): Promise<void> {
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+  onShutdown(shutdown);
 }
 
 main().catch((err) => {
