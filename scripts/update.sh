@@ -51,6 +51,7 @@ write_status() {
   printf '{"state":"%s","message":"%s","requestedBy":"%s","fromCommit":"%s","toCommit":"%s","at":"%s"}\n' \
     "$1" "$msg" "$REQUESTED_BY" "$OLD_COMMIT" "$NEW_COMMIT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS.tmp"
   chown "$APP_USER:" "$STATUS.tmp"
+  chmod 640 "$STATUS.tmp"
   mv -f "$STATUS.tmp" "$STATUS"
 }
 
