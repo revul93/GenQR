@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from './auth';
@@ -10,6 +10,9 @@ import { QrListPage } from './pages/QrListPage';
 import { QrDesignerPage } from './pages/QrDesignerPage';
 import { QrPrintPage } from './pages/QrPrintPage';
 import { LinksPage } from './pages/LinksPage';
+// Chart pages load on demand: the charting library is the largest dependency.
+const LinkStatsPage = lazy(() => import('./pages/LinkStatsPage').then((m) => ({ default: m.LinkStatsPage })));
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPages';
 import { SystemPage } from './pages/admin/SystemPage';
 import { AuditPage } from './pages/admin/AuditPage';
@@ -46,6 +49,8 @@ export function App() {
         <Route path="qr/new" element={<QrDesignerPage key="new" />} />
         <Route path="qr/:id" element={<QrDesignerPage />} />
         <Route path="links" element={<LinksPage />} />
+        <Route path="links/:id" element={<Suspense fallback={<CircularProgress />}><LinkStatsPage /></Suspense>} />
+        <Route path="dashboard" element={<Suspense fallback={<CircularProgress />}><DashboardPage /></Suspense>} />
         <Route path="account/password" element={<ChangePasswordPage />} />
         <Route path="admin/users" element={<AdminOnly><UsersPage /></AdminOnly>} />
         <Route path="admin/settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />

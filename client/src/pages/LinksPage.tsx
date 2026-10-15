@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link as RouterLink } from 'react-router';
+import { Link as RouterLink, useNavigate } from 'react-router';
 import {
   Alert,
   Chip,
@@ -21,7 +21,7 @@ import {
 import { api, errorMessage } from '../api';
 import { useAuth } from '../auth';
 import { linkState, type ShortLink } from '../qr';
-import { CopyButton, LinkDialog, STATE_CHIP } from '../components/LinkDialog';
+import { CopyButton, STATE_CHIP } from '../components/LinkDialog';
 
 export function LinksPage() {
   const { user } = useAuth();
@@ -32,7 +32,7 @@ export function LinksPage() {
   const [search, setSearch] = useState('');
   const [all, setAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<number | null>(null);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     const params = new URLSearchParams({ limit: String(rowsPerPage), offset: String(page * rowsPerPage) });
@@ -63,7 +63,7 @@ export function LinksPage() {
         </Stack>
       </Stack>
       <Typography variant="body2" color="text.secondary">
-        Every QR code for a website gets a short link. Change a link&apos;s destination here and printed codes follow it.
+        Every QR code for a website gets a short link. Open a link to see its statistics or change its destination; printed codes follow the new destination.
       </Typography>
       {error && <Alert severity="error">{error}</Alert>}
       <Paper>
@@ -83,7 +83,7 @@ export function LinksPage() {
               {items.map((l) => {
                 const state = linkState(l);
                 return (
-                  <TableRow key={l.id} hover onClick={() => setOpen(l.id)} sx={{ cursor: 'pointer' }}>
+                  <TableRow key={l.id} hover onClick={() => navigate(`/links/${l.id}`)} sx={{ cursor: 'pointer' }}>
                     <TableCell sx={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
                       <Link href={l.url} target="_blank" rel="noopener" underline="hover" sx={{ fontFamily: 'monospace' }}>
                         /short/{l.code}
@@ -135,7 +135,6 @@ export function LinksPage() {
           onRowsPerPageChange={(e) => (setRowsPerPage(Number(e.target.value)), setPage(0))}
         />
       </Paper>
-      <LinkDialog linkId={open} onClose={() => setOpen(null)} onChanged={() => void load()} />
     </Stack>
   );
 }

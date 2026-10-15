@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router';
 import {
   Alert,
   Box,
@@ -462,6 +462,9 @@ export function QrDesignerPage() {
                       </Typography>
                     )}
                     <Box sx={{ flexGrow: 1 }} />
+                    <Button size="small" component={RouterLink} to={`/links/${link.id}`}>
+                      Statistics
+                    </Button>
                     <Button size="small" onClick={() => setDialog('link')}>
                       Manage link
                     </Button>

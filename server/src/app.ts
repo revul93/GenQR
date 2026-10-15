@@ -15,6 +15,7 @@ import { adminUsersRouter } from './routes/adminUsers.js';
 import { adminSettingsRouter } from './routes/adminSettings.js';
 import { qrRouter } from './routes/qr.js';
 import { linksRouter } from './routes/links.js';
+import { statsRouter } from './routes/stats.js';
 import { shortRedirectRouter } from './routes/shortRedirect.js';
 
 export function createApp(): express.Express {
@@ -37,6 +38,7 @@ export function createApp(): express.Express {
   api.use('/setup', setupRouter);
   api.use('/auth', authRouter);
   api.use('/qr', qrRouter);
+  api.use(statsRouter); // /stats and /links/:id/stats
   api.use('/links', linksRouter);
   api.use('/admin/users', adminUsersRouter);
   api.use('/admin/settings', adminSettingsRouter);

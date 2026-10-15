@@ -9,6 +9,7 @@ import { deletePreset, savePreset } from '../services/presets.js';
 import { qrStyleSchema } from '../qr/style.js';
 import { getLinkPolicy, linkPolicySchema, publicBaseUrl, saveLinkPolicy } from '../services/shortLinks.js';
 import { setSetting, SettingKeys } from '../services/settings.js';
+import { analyticsConfigSchema, applyRetention, geoipStatus, getAnalyticsConfig, saveAnalyticsConfig } from '../services/clicks.js';
 import { emailConfigSchema, getEmailConfig, listEmailLog, saveEmailConfig, sendTestEmail } from '../services/email.js';
 
 export const adminSettingsRouter = Router();
@@ -132,4 +133,19 @@ adminSettingsRouter.get('/email/log', async (req, res) => {
     req.query,
   );
   res.json(await listEmailLog(limit, offset));
+});
+
+// --- Analytics --------------------------------------------------------------------------
+
+adminSettingsRouter.get('/analytics', async (_req, res) => {
+  res.json({ config: await getAnalyticsConfig(), geoip: geoipStatus() });
+});
+
+adminSettingsRouter.put('/analytics', async (req, res) => {
+  const config = parseBody(analyticsConfigSchema, req.body);
+  const before = await getAnalyticsConfig();
+  await saveAnalyticsConfig(config, req.user!.id);
+  await audit({ actor: actorOf(req.user!), action: 'settings.analytics_updated', details: { before, after: config }, ip: clientIp(req) });
+  const archived = await applyRetention();
+  res.json({ config, geoip: geoipStatus(), archived: archived.archived });
 });

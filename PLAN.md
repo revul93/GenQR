@@ -326,6 +326,13 @@ GenQR/
 - **Email log:** every message (QR, password reset, test) with its result, shown in Settings → Email.
 - **Self-service password reset** for local accounts: a one-hour single-use link. The response doesn't reveal whether an account exists (sending happens in the background), requests are rate-limited, and a reset signs the user out everywhere.
 
+**Phase 6 status:** done.
+- **What each redirect records:** source (QR scan vs link, via `?s=qr`), referrer host, browser, OS and device (ua-parser-js), and a country when a GeoLite2 database is placed in `data/`.
+- **Visitors and privacy:** unique visitors are counted with a keyed hash, and IPs are never stored. Bots (isbot) and HEAD link previews are excluded. Logging happens after the redirect is sent, so it never slows it down.
+- **Dashboards:** a personal dashboard (admins can switch to all users) and a page per link. Each shows totals, clicks and visitors over time, top links, devices, sources, OS, browsers, countries, and top creators (admin). Ranges run from 7 days to 12 months, using the viewer's timezone.
+- **CSV export** for both views.
+- **Retention:** 13 months of detailed clicks by default (configurable). Older clicks roll up into daily totals, so the long-range charts keep working.
+
 Phase 7 comes late on purpose. Because Knex is used from day one and the tests run on all engines, the code is portable from the start. Only the switch wizard itself waits.
 
 ## 14. Remaining Open Questions

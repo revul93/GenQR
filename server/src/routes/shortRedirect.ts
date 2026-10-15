@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { resolveCode } from '../services/shortLinks.js';
+import { recordClick } from '../services/clicks.js';
 
 /** Public redirector: GET /short/<code>. */
 export const shortRedirectRouter = Router();
@@ -33,6 +34,8 @@ shortRedirectRouter.get('/:code', async (req, res) => {
     res.status(result.status === 'missing' ? 404 : 410).type('html').send(unavailablePage(title, text));
     return;
   }
-  // Click logging (Phase 6) hooks in here.
   res.redirect(302, result.target);
+  // Logged after responding so the redirect is never slowed down. HEAD requests are
+  // link-preview probes, not visits.
+  if (req.method === 'GET') void recordClick(result.linkId, req);
 });

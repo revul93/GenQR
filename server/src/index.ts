@@ -3,6 +3,7 @@ import { closeDb, dbClient, initDb, migrateLatest } from './db/index.js';
 import { createApp } from './app.js';
 import { audit, SYSTEM_ACTOR } from './services/audit.js';
 import { purgeExpiredSessions } from './services/sessions.js';
+import { applyRetention } from './services/clicks.js';
 import { ensureSetupToken, printSetupBanner, removeSetupToken } from './services/setupToken.js';
 import { getVersionInfo } from './services/system.js';
 import { countUsers } from './services/users.js';
@@ -22,10 +23,17 @@ async function main(): Promise<void> {
   await audit({ actor: SYSTEM_ACTOR, action: 'system.started', details: { version, commit } });
 
   const purge = setInterval(() => purgeExpiredSessions().catch((err) => console.error('Session purge failed', err)), 60 * 60 * 1000);
+  const retention = () =>
+    applyRetention()
+      .then(({ archived }) => archived && console.log(`Archived ${archived} detailed clicks into daily totals`))
+      .catch((err) => console.error('Click retention failed', err));
+  const retentionTimer = setInterval(retention, 6 * 60 * 60 * 1000);
+  setTimeout(retention, 60 * 1000).unref();
 
   const shutdown = (signal: string) => {
     console.log(`${signal} received, shutting down`);
     clearInterval(purge);
+    clearInterval(retentionTimer);
     server.close(() => {
       closeDb().finally(() => process.exit(0));
     });

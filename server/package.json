@@ -17,13 +17,16 @@
     "express": "^5.3.0",
     "express-rate-limit": "^8.7.1",
     "helmet": "^8.3.0",
+    "isbot": "^5.2.2",
     "jsqr": "^1.4.0",
     "knex": "^3.3.0",
     "ldapts": "^9.2.0",
+    "maxmind": "^5.0.7",
     "nodemailer": "^10.1.1",
     "pdfkit": "^0.20.2",
     "qrcode": "^1.5.4",
     "sharp": "^0.35.5",
+    "ua-parser-js": "^1.0.41",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -33,6 +36,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/pdfkit": "^0.17.6",
     "@types/qrcode": "^1.5.6",
+    "@types/ua-parser-js": "^0.7.39",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

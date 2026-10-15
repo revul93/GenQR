@@ -23,6 +23,7 @@ import { api, errorMessage } from '../../api';
 import { BrandingSettings } from './BrandingSettings';
 import { LinkSettings } from './LinkSettings';
 import { EmailSettings } from './EmailSettings';
+import { AnalyticsSettings } from './AnalyticsSettings';
 
 interface AdConfig {
   enabled: boolean;
@@ -224,12 +225,14 @@ export function SettingsPage() {
           <Tab value="branding" label="Branding" />
           <Tab value="links" label="Short links" />
           <Tab value="email" label="Email" />
+          <Tab value="analytics" label="Analytics" />
         </Tabs>
         <Box sx={{ p: 3, maxWidth: 900 }}>
           {tab === 'ad' && <ActiveDirectorySettings />}
           {tab === 'branding' && <BrandingSettings />}
           {tab === 'links' && <LinkSettings />}
           {tab === 'email' && <EmailSettings />}
+          {tab === 'analytics' && <AnalyticsSettings />}
         </Box>
       </Paper>
     </Stack>
