@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+drivers/
+
+# Build output
+dist/
+build/
+client/dist/
+
+# Local configuration & secrets (never commit)
+.env
+.env.*
+!.env.example
+config/*.json
+!config/*.example.json
+
+# Runtime data (SQLite DB, uploads, backups, logs)
+data/
+backups/
+logs/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
