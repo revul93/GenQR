@@ -9,6 +9,8 @@ import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { HomePage } from './pages/HomePage';
 import { SystemPage } from './pages/admin/SystemPage';
 import { AuditPage } from './pages/admin/AuditPage';
+import { UsersPage } from './pages/admin/UsersPage';
+import { SettingsPage } from './pages/admin/SettingsPage';
 
 function AdminOnly({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -34,6 +36,8 @@ export function App() {
       <Route element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="account/password" element={<ChangePasswordPage />} />
+        <Route path="admin/users" element={<AdminOnly><UsersPage /></AdminOnly>} />
+        <Route path="admin/settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />
         <Route path="admin/system" element={<AdminOnly><SystemPage /></AdminOnly>} />
         <Route path="admin/audit" element={<AdminOnly><AuditPage /></AdminOnly>} />
         <Route path="*" element={<Navigate to="/" replace />} />

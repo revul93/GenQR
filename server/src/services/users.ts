@@ -121,3 +121,52 @@ export async function recordLoginFailure(user: UserRecord): Promise<void> {
 export async function recordLoginSuccess(id: number): Promise<void> {
   await db()('users').where({ id }).update({ failed_logins: 0, locked_until: null, last_login_at: Date.now() });
 }
+
+export interface UserListItem extends User {
+  locked: boolean;
+}
+
+export async function listUsers(opts: { search?: string; source?: UserSource; role?: Role }): Promise<UserListItem[]> {
+  const q = db()('users');
+  if (opts.search) {
+    const term = `%${opts.search.toLowerCase()}%`;
+    q.where((w) => w.whereRaw('LOWER(username) LIKE ?', [term]).orWhereRaw('LOWER(display_name) LIKE ?', [term]).orWhereRaw('LOWER(email) LIKE ?', [term]));
+  }
+  if (opts.source) q.where({ source: opts.source });
+  if (opts.role) q.where({ role: opts.role });
+  const rows = await q.orderBy('username');
+  const now = Date.now();
+  return rows.map((r) => {
+    const u = mapUser(r);
+    return { ...publicUser(u), locked: !!u.lockedUntil && u.lockedUntil > now };
+  });
+}
+
+export interface UserPatch {
+  displayName?: string;
+  email?: string | null;
+  role?: Role;
+  isActive?: boolean;
+}
+
+export async function updateUser(id: number, patch: UserPatch): Promise<void> {
+  const row: Record<string, unknown> = { updated_at: Date.now() };
+  if (patch.displayName !== undefined) row.display_name = patch.displayName;
+  if (patch.email !== undefined) row.email = patch.email;
+  if (patch.role !== undefined) row.role = patch.role;
+  if (patch.isActive !== undefined) row.is_active = patch.isActive;
+  await db()('users').where({ id }).update(row);
+}
+
+export async function deleteUser(id: number): Promise<void> {
+  await db()('users').where({ id }).delete();
+}
+
+export async function countActiveAdmins(): Promise<number> {
+  const row = await db()('users').where({ role: 'admin', is_active: true }).count({ n: '*' }).first();
+  return Number(row?.n ?? 0);
+}
+
+export async function clearLockout(id: number): Promise<void> {
+  await db()('users').where({ id }).update({ failed_logins: 0, locked_until: null });
+}

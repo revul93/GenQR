@@ -11,6 +11,8 @@ import { getVersionInfo } from './services/system.js';
 import { setupRouter } from './routes/setup.js';
 import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
+import { adminUsersRouter } from './routes/adminUsers.js';
+import { adminSettingsRouter } from './routes/adminSettings.js';
 
 export function createApp(): express.Express {
   const app = express();
@@ -30,6 +32,8 @@ export function createApp(): express.Express {
   });
   api.use('/setup', setupRouter);
   api.use('/auth', authRouter);
+  api.use('/admin/users', adminUsersRouter);
+  api.use('/admin/settings', adminSettingsRouter);
   api.use('/admin', adminRouter);
   api.use(() => {
     throw new HttpError(404, 'Not found.');

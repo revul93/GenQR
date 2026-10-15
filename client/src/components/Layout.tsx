@@ -27,6 +27,12 @@ export function Layout() {
           </Button>
           {user?.role === 'admin' && (
             <>
+              <Button component={NavLink} to="/admin/users" sx={navButtonSx}>
+                Users
+              </Button>
+              <Button component={NavLink} to="/admin/settings" sx={navButtonSx}>
+                Settings
+              </Button>
               <Button component={NavLink} to="/admin/audit" sx={navButtonSx}>
                 Audit log
               </Button>
