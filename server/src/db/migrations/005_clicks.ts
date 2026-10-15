@@ -5,7 +5,7 @@ export async function up(knex: Knex): Promise<void> {
   // clicks_daily and deleted.
   await knex.schema.createTable('clicks', (t) => {
     t.increments('id').primary();
-    t.integer('short_link_id').notNullable().references('id').inTable('short_links').onDelete('CASCADE');
+    t.integer('short_link_id').unsigned().notNullable().references('id').inTable('short_links').onDelete('CASCADE');
     t.bigInteger('ts').notNullable();
     t.string('source', 10).notNullable(); // qr | direct
     t.string('referrer_host', 255).nullable();
@@ -20,7 +20,7 @@ export async function up(knex: Knex): Promise<void> {
   });
 
   await knex.schema.createTable('clicks_daily', (t) => {
-    t.integer('short_link_id').notNullable().references('id').inTable('short_links').onDelete('CASCADE');
+    t.integer('short_link_id').unsigned().notNullable().references('id').inTable('short_links').onDelete('CASCADE');
     t.string('day', 10).notNullable(); // YYYY-MM-DD (UTC)
     t.integer('clicks').notNullable();
     t.integer('visitors').notNullable();

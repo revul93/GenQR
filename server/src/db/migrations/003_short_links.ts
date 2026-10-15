@@ -10,8 +10,8 @@ export async function up(knex: Knex): Promise<void> {
     t.increments('id').primary();
     t.string('code', 64).notNullable().unique();
     t.text('target_url').notNullable();
-    t.integer('owner_id').notNullable().references('id').inTable('users');
-    t.integer('qr_code_id').nullable().unique().references('id').inTable('qr_codes');
+    t.integer('owner_id').unsigned().notNullable().references('id').inTable('users');
+    t.integer('qr_code_id').unsigned().nullable().unique().references('id').inTable('qr_codes');
     t.boolean('is_active').notNullable().defaultTo(true);
     t.bigInteger('expires_at').nullable();
     t.bigInteger('created_at').notNullable();
@@ -21,7 +21,7 @@ export async function up(knex: Knex): Promise<void> {
 
   await knex.schema.createTable('short_link_history', (t) => {
     t.increments('id').primary();
-    t.integer('short_link_id').notNullable().references('id').inTable('short_links').onDelete('CASCADE');
+    t.integer('short_link_id').unsigned().notNullable().references('id').inTable('short_links').onDelete('CASCADE');
     t.string('field', 20).notNullable(); // target | active | expires
     t.text('old_value').nullable();
     t.text('new_value').nullable();

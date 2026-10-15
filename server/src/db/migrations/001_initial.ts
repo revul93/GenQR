@@ -1,5 +1,7 @@
 import type { Knex } from 'knex';
 
+// Foreign-key columns are unsigned to match Knex's increments() ids: MySQL/MariaDB reject
+// foreign keys between signed and unsigned integers. Other engines ignore unsigned.
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable('users', (t) => {
     t.increments('id').primary();
@@ -28,7 +30,7 @@ export async function up(knex: Knex): Promise<void> {
 
   await knex.schema.createTable('sessions', (t) => {
     t.string('id', 64).primary(); // sha256 of the cookie value
-    t.integer('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE');
+    t.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
     t.bigInteger('created_at').notNullable();
     t.bigInteger('last_seen_at').notNullable();
     t.bigInteger('expires_at').notNullable().index();
@@ -38,7 +40,7 @@ export async function up(knex: Knex): Promise<void> {
 
   await knex.schema.createTable('password_resets', (t) => {
     t.string('token_hash', 64).primary();
-    t.integer('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE');
+    t.integer('user_id').unsigned().notNullable().references('id').inTable('users').onDelete('CASCADE');
     t.bigInteger('expires_at').notNullable();
     t.bigInteger('used_at').nullable();
   });

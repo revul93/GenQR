@@ -9,7 +9,7 @@ export async function up(knex: Knex): Promise<void> {
     t.integer('height').notNullable();
     // Shared logos form the company library managed by admins; others belong to their uploader.
     t.boolean('is_shared').notNullable().defaultTo(false);
-    t.integer('owner_id').nullable().references('id').inTable('users');
+    t.integer('owner_id').unsigned().nullable().references('id').inTable('users');
     t.bigInteger('created_at').notNullable();
   });
 
@@ -17,7 +17,7 @@ export async function up(knex: Knex): Promise<void> {
     t.increments('id').primary();
     t.string('name', 100).notNullable().unique();
     t.text('style').notNullable(); // JSON
-    t.integer('logo_id').nullable().references('id').inTable('logos');
+    t.integer('logo_id').unsigned().nullable().references('id').inTable('logos');
     t.boolean('is_default').notNullable().defaultTo(false);
     t.integer('created_by').nullable();
     t.bigInteger('created_at').notNullable();
@@ -26,13 +26,13 @@ export async function up(knex: Knex): Promise<void> {
 
   await knex.schema.createTable('qr_codes', (t) => {
     t.increments('id').primary();
-    t.integer('owner_id').notNullable().references('id').inTable('users');
+    t.integer('owner_id').unsigned().notNullable().references('id').inTable('users');
     t.string('title', 200).notNullable();
     t.string('content_type', 20).notNullable(); // url | text
     t.text('content').notNullable(); // what the user entered
     t.text('encoded_data').notNullable(); // what the symbol encodes
     t.text('style').notNullable(); // JSON
-    t.integer('logo_id').nullable().references('id').inTable('logos');
+    t.integer('logo_id').unsigned().nullable().references('id').inTable('logos');
     t.bigInteger('created_at').notNullable();
     t.bigInteger('updated_at').notNullable();
     t.bigInteger('deleted_at').nullable();

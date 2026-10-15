@@ -210,3 +210,10 @@ export async function restoreDump(target: Knex, targetClient: DbClient, file: st
     progress(`Restored ${table}: ${n}`);
   }
 }
+
+/** Drops GenQR's tables (children first) and Knex's bookkeeping. Only for a target we filled ourselves. */
+export async function dropAppTables(conn: Knex): Promise<void> {
+  for (const table of [...APP_TABLES].reverse()) await conn.schema.dropTableIfExists(table);
+  await conn.schema.dropTableIfExists('knex_migrations');
+  await conn.schema.dropTableIfExists('knex_migrations_lock');
+}

@@ -6,7 +6,7 @@ import { CONFIG_DIR, DATA_DIR, ensureDir } from '../config.js';
 import { encryptSecret } from '../services/crypto.js';
 import { installDriver } from './drivers.js';
 import { createKnex, db, dbClient, DB_CONFIG_FILE, loadDbConfig, migrateLatest, writeDbConfig, type DbClient, type DbConfig } from './index.js';
-import { assertEmpty, copyDatabase } from './transfer.js';
+import { assertEmpty, copyDatabase, dropAppTables } from './transfer.js';
 
 /**
  * Moving GenQR to another database: install driver → test → migrate the (empty) target →
@@ -136,6 +136,8 @@ export async function runSwitch(target: SwitchTarget, requestedBy: string, sourc
 
   saveStatus({ state: 'running', from: dbClient(), to: target.client, log: [], error: undefined, startedAt: new Date().toISOString(), finishedAt: undefined, requestedBy, step: 'driver' });
   let conn: Knex | undefined;
+  // Set once we start writing to the target; it was verified empty, so on failure we can clear it.
+  let touchedTarget = false;
   try {
     log(`Switching from ${current.client} to ${target.client} (requested by ${requestedBy})`);
     await installDriver(target.client, log);
@@ -146,6 +148,7 @@ export async function runSwitch(target: SwitchTarget, requestedBy: string, sourc
     if (await conn.schema.hasTable('users')) await assertEmpty(conn);
 
     saveStatus({ step: 'migrate' });
+    touchedTarget = true;
     const applied = await migrateLatest(conn);
     log(`Created the schema (${applied.length} migrations).`);
     await assertEmpty(conn);
@@ -162,6 +165,11 @@ export async function runSwitch(target: SwitchTarget, requestedBy: string, sourc
     return 'restart';
   } catch (err) {
     log(`FAILED: ${(err as Error).message}`);
+    if (conn && touchedTarget) {
+      await dropAppTables(conn)
+        .then(() => log('Removed the partly created tables from the target database; it is empty again.'))
+        .catch((e: Error) => log(`Could not clean up the target database: ${e.message}`));
+    }
     saveStatus({ state: 'failed', error: (err as Error).message, finishedAt: new Date().toISOString() });
     throw err;
   } finally {
