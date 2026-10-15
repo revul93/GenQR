@@ -137,8 +137,10 @@ fi
 
 # Keep the previous log, then mirror everything to the new one (the web UI tails it).
 [ -f "$LOG" ] && mv -f "$LOG" "$LOG.1"
-exec > >(tee -a "$LOG") 2>&1
+: > "$LOG"
 chown "$APP_USER:" "$LOG"
+chmod 640 "$LOG"
+exec > >(tee -a "$LOG") 2>&1
 
 trap 'fail "Update step failed (line $LINENO)"' ERR
 
