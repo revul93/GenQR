@@ -8,7 +8,8 @@ import { EXPORT_TYPES, exportQr, type ExportFormat } from '../qr/export.js';
 import { actorOf, audit } from '../services/audit.js';
 import { deleteLogo, getUsableLogo, listLogos, logoDataUri, readLogoFile, saveLogo } from '../services/logos.js';
 import { listPresets } from '../services/presets.js';
-import { createQr, encodeContent, getQr, listQr, softDeleteQr, svgRendererFor, updateQr, type QrInput } from '../services/qrCodes.js';
+import { createQr, getQr, listQr, softDeleteQr, svgRendererFor, updateQr, type QrInput } from '../services/qrCodes.js';
+import { sampleQrData, validateTarget } from '../services/shortLinks.js';
 
 export const qrRouter = Router();
 qrRouter.use(requireAuth);
@@ -23,6 +24,9 @@ const contentSchema = z.object({
 });
 
 const qrSchema = contentSchema.extend({ title: z.string().trim().min(1, 'Give the QR code a title.').max(200) });
+const createSchema = qrSchema.extend({ alias: z.string().trim().max(40).optional() });
+// The preview also renders while the content field is still empty.
+const previewSchema = contentSchema.extend({ content: z.string().trim().max(MAX_CONTENT), qrId: z.number().int().positive().optional() });
 
 const idOf = (req: Request) => {
   const id = Number(req.params.id);
@@ -37,11 +41,19 @@ async function checkLogo(input: { logoId: number | null }, req: Request) {
 // --- Designer support ---------------------------------------------------------------
 
 qrRouter.post('/preview', async (req, res) => {
-  const body = parseBody(contentSchema, req.body);
+  const body = parseBody(previewSchema, req.body);
   await checkLogo(body, req);
-  const data = encodeContent(body.contentType, body.content);
+  // URL codes encode a short link; the preview uses one of the same length.
+  let data = body.content || 'GenQR';
+  let contentError: string | null = null;
+  if (body.contentType === 'url') {
+    // A saved code previews its real short link; a new one a placeholder of the same length.
+    const saved = body.qrId ? await getQr(body.qrId, req.user!) : null;
+    data = saved?.contentType === 'url' ? saved.encodedData : await sampleQrData();
+    if (body.content) await validateTarget(body.content).catch((err: Error) => (contentError = err.message));
+  }
   const svg = renderSvg({ data, style: body.style, logoDataUri: await logoDataUri(body.logoId), sizePx: 512 });
-  res.json({ svg, scannable: await scanCheck(svg, data) });
+  res.json({ svg, scannable: await scanCheck(svg, data), contentError });
 });
 
 qrRouter.get('/presets', async (_req, res) => {
@@ -86,11 +98,11 @@ qrRouter.get('/', async (req, res) => {
 });
 
 qrRouter.post('/', async (req, res) => {
-  const body: QrInput = parseBody(qrSchema, req.body);
+  const body = parseBody(createSchema, req.body);
   await checkLogo(body, req);
   const id = await createQr(body, req.user!);
   const qr = await getQr(id, req.user!);
-  await audit({ actor: actorOf(req.user!), action: 'qr.created', entityType: 'qr', entityId: id, details: { title: qr.title, contentType: qr.contentType, content: qr.content }, ip: clientIp(req) });
+  await audit({ actor: actorOf(req.user!), action: 'qr.created', entityType: 'qr', entityId: id, details: { title: qr.title, contentType: qr.contentType, content: qr.content, shortCode: qr.shortLink?.code }, ip: clientIp(req) });
   res.status(201).json({ qr });
 });
 
@@ -102,9 +114,9 @@ qrRouter.put('/:id', async (req, res) => {
   const before = await getQr(idOf(req), req.user!);
   const body: QrInput = parseBody(qrSchema, req.body);
   await checkLogo(body, req);
-  await updateQr(before.id, body);
+  const { symbolChanged } = await updateQr(before, body, actorOf(req.user!));
   const qr = await getQr(before.id, req.user!);
-  const details: Record<string, unknown> = { title: qr.title };
+  const details: Record<string, unknown> = { title: qr.title, symbolChanged };
   if (before.content !== qr.content) details.content = { from: before.content, to: qr.content };
   if (JSON.stringify(before.style) !== JSON.stringify(qr.style) || before.logoId !== qr.logoId) details.designChanged = true;
   await audit({ actor: actorOf(req.user!), action: 'qr.updated', entityType: 'qr', entityId: qr.id, details, ip: clientIp(req) });
@@ -113,8 +125,8 @@ qrRouter.put('/:id', async (req, res) => {
 
 qrRouter.delete('/:id', async (req, res) => {
   const qr = await getQr(idOf(req), req.user!);
-  await softDeleteQr(qr.id);
-  await audit({ actor: actorOf(req.user!), action: 'qr.deleted', entityType: 'qr', entityId: qr.id, details: { title: qr.title, owner: qr.ownerUsername }, ip: clientIp(req) });
+  await softDeleteQr(qr, actorOf(req.user!));
+  await audit({ actor: actorOf(req.user!), action: 'qr.deleted', entityType: 'qr', entityId: qr.id, details: { title: qr.title, owner: qr.ownerUsername, shortLinkDisabled: qr.shortLink?.code ?? null }, ip: clientIp(req) });
   res.json({ ok: true });
 });
 

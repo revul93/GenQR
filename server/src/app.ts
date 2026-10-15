@@ -14,6 +14,8 @@ import { adminRouter } from './routes/admin.js';
 import { adminUsersRouter } from './routes/adminUsers.js';
 import { adminSettingsRouter } from './routes/adminSettings.js';
 import { qrRouter } from './routes/qr.js';
+import { linksRouter } from './routes/links.js';
+import { shortRedirectRouter } from './routes/shortRedirect.js';
 
 export function createApp(): express.Express {
   const app = express();
@@ -35,6 +37,7 @@ export function createApp(): express.Express {
   api.use('/setup', setupRouter);
   api.use('/auth', authRouter);
   api.use('/qr', qrRouter);
+  api.use('/links', linksRouter);
   api.use('/admin/users', adminUsersRouter);
   api.use('/admin/settings', adminSettingsRouter);
   api.use('/admin', adminRouter);
@@ -42,6 +45,7 @@ export function createApp(): express.Express {
     throw new HttpError(404, 'Not found.');
   });
   app.use('/api', api);
+  app.use('/short', shortRedirectRouter);
 
   // Built React app, with client-side routing fallback.
   if (fs.existsSync(CLIENT_DIST_DIR)) {

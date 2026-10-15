@@ -6,6 +6,7 @@ import {
   Button,
   ButtonBase,
   Checkbox,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -31,10 +32,12 @@ import Block from '@mui/icons-material/Block';
 import CheckCircle from '@mui/icons-material/CheckCircle';
 import Warning from '@mui/icons-material/Warning';
 import Bookmark from '@mui/icons-material/Bookmark';
+import LinkIcon from '@mui/icons-material/Link';
 import { api, errorMessage } from '../api';
 import { useAuth } from '../auth';
-import { colourWarnings, DEFAULT_STYLE, fetchLogos, fetchPresets, logoUrl, svgDataUrl, uploadLogo, type ContentType, type Logo, type Preset, type QrCode, type QrStyle } from '../qr';
+import { colourWarnings, DEFAULT_STYLE, fetchLogos, fetchPresets, linkState, logoUrl, svgDataUrl, uploadLogo, type ContentType, type Logo, type Preset, type QrCode, type QrShortLink, type QrStyle } from '../qr';
 import { ExportDialog, PrintDialog } from '../components/ExportDialog';
+import { CopyButton, LinkDialog, STATE_CHIP } from '../components/LinkDialog';
 
 interface Form {
   title: string;
@@ -96,14 +99,16 @@ export function QrDesignerPage() {
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [saved, setSaved] = useState<Form | null>(null);
   const [owner, setOwner] = useState<string | null>(null);
+  const [link, setLink] = useState<QrShortLink | null>(null);
+  const [alias, setAlias] = useState('');
   const [loading, setLoading] = useState(true);
   const [logos, setLogos] = useState<Logo[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
-  const [preview, setPreview] = useState<{ svg: string; scannable: boolean } | null>(null);
+  const [preview, setPreview] = useState<{ svg: string; scannable: boolean; contentError: string | null } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ severity: 'success' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [dialog, setDialog] = useState<'export' | 'print' | 'preset' | null>(null);
+  const [dialog, setDialog] = useState<'export' | 'print' | 'preset' | 'link' | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const previewSeq = useRef(0);
 
@@ -124,6 +129,7 @@ export function QrDesignerPage() {
           setForm(f);
           setSaved(f);
           setOwner(qr.ownerUsername);
+          setLink(qr.shortLink);
         } else {
           const def = p.find((x) => x.isDefault);
           setForm(def ? { ...EMPTY_FORM, style: { ...DEFAULT_STYLE, ...def.style }, logoId: def.logoId } : EMPTY_FORM);
@@ -141,11 +147,11 @@ export function QrDesignerPage() {
   const previewKey = JSON.stringify([form.contentType, form.content, form.style, form.logoId]);
   useEffect(() => {
     if (loading) return;
-    const content = form.content.trim() || (form.contentType === 'url' ? 'https://example.com' : 'GenQR');
+    const content = form.content.trim();
     const seq = ++previewSeq.current;
     const t = setTimeout(async () => {
       try {
-        const res = await api.post<{ svg: string; scannable: boolean }>('/qr/preview', { contentType: form.contentType, content, style: form.style, logoId: form.logoId });
+        const res = await api.post<{ svg: string; scannable: boolean; contentError: string | null }>('/qr/preview', { contentType: form.contentType, content, style: form.style, logoId: form.logoId, qrId: qrId ?? undefined });
         if (seq === previewSeq.current) {
           setPreview(res);
           setPreviewError(null);
@@ -166,11 +172,12 @@ export function QrDesignerPage() {
     setNotice(null);
     try {
       if (qrId) {
-        await api.put(`/qr/${qrId}`, form);
+        const { qr } = await api.put<{ qr: QrCode }>(`/qr/${qrId}`, form);
+        setLink(qr.shortLink);
         setSaved(form);
         setNotice({ severity: 'success', text: 'Saved.' });
       } else {
-        const { qr } = await api.post<{ qr: QrCode }>('/qr', form);
+        const { qr } = await api.post<{ qr: QrCode }>('/qr', { ...form, alias: form.contentType === 'url' && alias.trim() ? alias.trim() : undefined });
         navigate(`/qr/${qr.id}`, { replace: true });
       }
     } catch (err) {
@@ -225,7 +232,7 @@ export function QrDesignerPage() {
         <Stack spacing={2}>
           <Section title="Content">
             <TextField label="Title" value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="e.g. Product brochure — Expo 2026" required />
-            <ToggleButtonGroup exclusive size="small" value={form.contentType} onChange={(_e, v: ContentType | null) => v && set({ contentType: v })}>
+            <ToggleButtonGroup exclusive size="small" value={form.contentType} disabled={!!qrId} onChange={(_e, v: ContentType | null) => v && set({ contentType: v })}>
               <ToggleButton value="url">Website link</ToggleButton>
               <ToggleButton value="text">Plain text</ToggleButton>
             </ToggleButtonGroup>
@@ -236,9 +243,29 @@ export function QrDesignerPage() {
               placeholder={form.contentType === 'url' ? 'https://www.example.com/page' : 'Text people will see when they scan the code'}
               multiline={form.contentType === 'text'}
               minRows={form.contentType === 'text' ? 3 : undefined}
-              helperText={`${form.content.length}/2000 characters. Shorter content makes a simpler, easier-to-scan code.`}
+              error={!!preview?.contentError}
+              helperText={
+                preview?.contentError ??
+                (form.contentType === 'url'
+                  ? qrId
+                    ? 'You can change this at any time; printed copies of this QR code follow the new link.'
+                    : 'The QR code points to a short link, so you can change this destination later without reprinting.'
+                  : qrId
+                    ? 'Changing the text changes the QR code itself; copies already printed keep the old text.'
+                    : `${form.content.length}/2000 characters. Shorter text makes a simpler, easier-to-scan code.`)
+              }
               slotProps={{ htmlInput: { maxLength: 2000 } }}
             />
+            {!qrId && form.contentType === 'url' && (
+              <TextField
+                label="Custom short name (optional)"
+                value={alias}
+                onChange={(e) => setAlias(e.target.value)}
+                placeholder="e.g. expo2026"
+                helperText={`Short link: …/short/${alias.trim() || 'a7Kp3xQ'}. Leave empty for a random code. It cannot be changed later.`}
+                slotProps={{ htmlInput: { maxLength: 40 } }}
+              />
+            )}
           </Section>
 
           {presets.length > 0 && (
@@ -415,6 +442,29 @@ export function QrDesignerPage() {
                   </Typography>
                 </Stack>
               )}
+              {link && (
+                <Paper variant="outlined" sx={{ p: 1.5 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <LinkIcon color="action" fontSize="small" />
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', flexGrow: 1, wordBreak: 'break-all' }}>
+                      {link.url}
+                    </Typography>
+                    <CopyButton text={link.url} />
+                  </Stack>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 1 }}>
+                    <Chip size="small" label={STATE_CHIP[linkState(link)].label} color={STATE_CHIP[linkState(link)].color} />
+                    {link.expiresAt && linkState(link) === 'active' && (
+                      <Typography variant="caption" color="text.secondary">
+                        until {new Date(link.expiresAt).toLocaleString()}
+                      </Typography>
+                    )}
+                    <Box sx={{ flexGrow: 1 }} />
+                    <Button size="small" onClick={() => setDialog('link')}>
+                      Manage link
+                    </Button>
+                  </Stack>
+                </Paper>
+              )}
               {warnings.map((w) => (
                 <Alert key={w} severity="warning" sx={{ py: 0 }}>
                   {w}
@@ -456,6 +506,16 @@ export function QrDesignerPage() {
 
       {qrId && <ExportDialog qrId={qrId} open={dialog === 'export'} onClose={() => setDialog(null)} />}
       {qrId && <PrintDialog qrId={qrId} open={dialog === 'print'} onClose={() => setDialog(null)} />}
+      <LinkDialog
+        linkId={dialog === 'link' && link ? link.id : null}
+        onClose={() => setDialog(null)}
+        onChanged={(l) => {
+          setLink({ id: l.id, code: l.code, url: l.url, isActive: l.isActive, expiresAt: l.expiresAt });
+          // A destination edited in the dialog is also the code's content.
+          setForm((f) => ({ ...f, content: l.targetUrl }));
+          setSaved((sv) => (sv ? { ...sv, content: l.targetUrl } : sv));
+        }}
+      />
       <SavePresetDialog
         open={dialog === 'preset'}
         presets={presets}

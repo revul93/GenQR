@@ -33,6 +33,45 @@ export const DEFAULT_STYLE: QrStyle = {
 
 export type ContentType = 'url' | 'text';
 
+export interface QrShortLink {
+  id: number;
+  code: string;
+  url: string;
+  isActive: boolean;
+  expiresAt: number | null;
+}
+
+export interface ShortLink {
+  id: number;
+  code: string;
+  url: string;
+  targetUrl: string;
+  ownerId: number;
+  ownerUsername: string;
+  qrCodeId: number | null;
+  qrTitle: string | null;
+  isActive: boolean;
+  expiresAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface LinkHistoryEntry {
+  id: number;
+  field: 'target' | 'active' | 'expires';
+  oldValue: string | null;
+  newValue: string | null;
+  changedByName: string;
+  changedAt: number;
+}
+
+/** "active" | "disabled" | "expired" for display. */
+export function linkState(link: { isActive: boolean; expiresAt: number | null }): 'active' | 'disabled' | 'expired' {
+  if (!link.isActive) return 'disabled';
+  if (link.expiresAt != null && link.expiresAt <= Date.now()) return 'expired';
+  return 'active';
+}
+
 export interface QrCode {
   id: number;
   ownerId: number;
@@ -44,6 +83,7 @@ export interface QrCode {
   encodedData: string;
   style: QrStyle;
   logoId: number | null;
+  shortLink: QrShortLink | null;
   createdAt: number;
   updatedAt: number;
 }

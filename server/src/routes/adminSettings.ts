@@ -7,6 +7,8 @@ import { adConfigSchema, getAdConfig, saveAdConfig, testAdConfig } from '../serv
 import { getUsableLogo } from '../services/logos.js';
 import { deletePreset, savePreset } from '../services/presets.js';
 import { qrStyleSchema } from '../qr/style.js';
+import { getLinkPolicy, linkPolicySchema, publicBaseUrl, saveLinkPolicy } from '../services/shortLinks.js';
+import { setSetting, SettingKeys } from '../services/settings.js';
 
 export const adminSettingsRouter = Router();
 adminSettingsRouter.use(requireAdmin);
@@ -71,4 +73,26 @@ adminSettingsRouter.delete('/presets/:id', async (req, res) => {
   const preset = await deletePreset(presetId(req.params.id));
   await audit({ actor: actorOf(req.user!), action: 'preset.deleted', entityType: 'preset', entityId: preset.id, details: { name: preset.name }, ip: clientIp(req) });
   res.json({ ok: true });
+});
+
+// --- Short links ----------------------------------------------------------------------
+
+const linkSettingsSchema = z.object({
+  publicBaseUrl: z
+    .url({ protocol: /^https?$/, message: 'Enter a full http:// or https:// address.' })
+    .transform((u) => u.replace(/\/+$/, '')),
+  policy: linkPolicySchema,
+});
+
+adminSettingsRouter.get('/links', async (_req, res) => {
+  res.json({ publicBaseUrl: await publicBaseUrl(), policy: await getLinkPolicy() });
+});
+
+adminSettingsRouter.put('/links', async (req, res) => {
+  const body = parseBody(linkSettingsSchema, req.body);
+  const before = { publicBaseUrl: await publicBaseUrl(), policy: await getLinkPolicy() };
+  await setSetting(SettingKeys.publicBaseUrl, body.publicBaseUrl, { userId: req.user!.id });
+  await saveLinkPolicy(body.policy, req.user!.id);
+  await audit({ actor: actorOf(req.user!), action: 'settings.links_updated', details: { before, after: body }, ip: clientIp(req) });
+  res.json(body);
 });

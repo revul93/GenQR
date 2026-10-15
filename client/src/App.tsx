@@ -9,6 +9,7 @@ import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { QrListPage } from './pages/QrListPage';
 import { QrDesignerPage } from './pages/QrDesignerPage';
 import { QrPrintPage } from './pages/QrPrintPage';
+import { LinksPage } from './pages/LinksPage';
 import { SystemPage } from './pages/admin/SystemPage';
 import { AuditPage } from './pages/admin/AuditPage';
 import { UsersPage } from './pages/admin/UsersPage';
@@ -40,6 +41,7 @@ export function App() {
         <Route index element={<QrListPage />} />
         <Route path="qr/new" element={<QrDesignerPage key="new" />} />
         <Route path="qr/:id" element={<QrDesignerPage />} />
+        <Route path="links" element={<LinksPage />} />
         <Route path="account/password" element={<ChangePasswordPage />} />
         <Route path="admin/users" element={<AdminOnly><UsersPage /></AdminOnly>} />
         <Route path="admin/settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />

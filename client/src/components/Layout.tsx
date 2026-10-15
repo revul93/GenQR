@@ -25,6 +25,9 @@ export function Layout() {
           <Button component={NavLink} to="/" end sx={navButtonSx}>
             QR codes
           </Button>
+          <Button component={NavLink} to="/links" sx={navButtonSx}>
+            Short links
+          </Button>
           {user?.role === 'admin' && (
             <>
               <Button component={NavLink} to="/admin/users" sx={navButtonSx}>

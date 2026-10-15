@@ -311,6 +311,14 @@ GenQR/
 
 **Phase 3 status:** done. The designer offers colours, gradients, pattern and corner shapes, logos (a shared company library plus personal uploads; SVG uploads are rasterised to PNG), brand presets with a default, and a live preview with a **scan check** (the server decodes its own render). Codes are saved with history and search, can be downloaded as PNG/JPG/SVG/PDF/DOCX (PDF/DOCX at an exact printed size in cm) and printed at a chosen size. Deleting a user transfers their codes to another user. Note: until Phase 4, URL codes encode the target URL directly; Phase 4 switches new and existing URL codes to `/short/<code>` links.
 
+**Phase 4 status:** done.
+- **Short links:** every URL code gets a `/short/<code>` link (random 7 characters or a custom name), and the QR code encodes `…/short/<code>?s=qr`. Codes from Phase 3 were migrated automatically.
+- **Editing:** the destination can be changed from the designer or the Short links page without changing the printed symbol. A saved code's type is locked.
+- **Redirects:** 302 with `Cache-Control: no-store`. Unknown, switched-off and expired links show a branded page (404/410).
+- **Link controls:** on/off switch, optional expiry, and a per-link change history.
+- **Safety:** only http/https targets; no embedded credentials; no loops back to `/short/`; an admin allowlist or blocklist of domains (subdomains included); redirects are rate-limited.
+- **Deleting** a QR code switches its link off.
+
 Phase 7 comes late on purpose. Because Knex is used from day one and the tests run on all engines, the code is portable from the start. Only the switch wizard itself waits.
 
 ## 14. Remaining Open Questions

@@ -138,7 +138,7 @@ export function QrListPage() {
                   {qr.title}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" noWrap title={qr.content}>
-                  {qr.content}
+                  {qr.shortLink ? `/short/${qr.shortLink.code} → ${qr.content.replace(/^https?:\/\//, '')}` : qr.content}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   {new Date(qr.createdAt).toLocaleDateString()}
@@ -183,7 +183,11 @@ export function QrListPage() {
       <Dialog open={action?.kind === 'delete'} onClose={() => setAction(null)}>
         <DialogTitle>Delete “{action?.qr.title}”?</DialogTitle>
         <DialogContent>
-          <DialogContentText>It disappears from your list. Codes that were already printed are not affected.</DialogContentText>
+          <DialogContentText>
+            {action?.qr.shortLink
+              ? 'It disappears from your list and its short link is switched off: printed copies will show a "link not available" page.'
+              : 'It disappears from your list. Copies that were already printed still show their text.'}
+          </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAction(null)}>Cancel</Button>
