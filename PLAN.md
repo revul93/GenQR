@@ -307,6 +307,8 @@ GenQR/
 
 **Phase 1 status:** done for Linux. The Windows equivalents (`install.ps1`, `update.ps1`, `genqrctl.ps1`, plus a Windows Service and a Scheduled Task as the update trigger) move to Phase 8, since Linux is the primary target. On Windows the app already runs with `npm start`, and the CLI works via `npm run cli -- <command>`.
 
+**Phase 2 status:** done. Local users, AD settings (with a test button and failover across several domain controllers), LDAP search/import, and AD sign-in (also accepting `DOMAIN\user` and `user@domain`) all work. Name and email are refreshed from AD at each sign-in. Still to do: the optional nightly job that disables users removed from AD. Ownership reassignment on delete arrives with QR codes in Phase 3.
+
 Phase 7 comes late on purpose. Because Knex is used from day one and the tests run on all engines, the code is portable from the start. Only the switch wizard itself waits.
 
 ## 14. Remaining Open Questions
