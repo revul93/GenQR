@@ -7,6 +7,8 @@ import { AdUnavailableError, verifyAdCredentials, type AdLoginResult } from '../
 import { clearSessionCookie, requireSession, setSessionCookie } from '../auth/middleware.js';
 import { actorOf, audit } from '../services/audit.js';
 import { createSession, destroySession, destroyUserSessions } from '../services/sessions.js';
+import { isEmailEnabled } from '../services/email.js';
+import { requestPasswordReset, resetPassword } from '../services/passwordReset.js';
 import {
   findUserById,
   findUserByUsername,
@@ -133,4 +135,22 @@ authRouter.post('/change-password', requireSession, async (req, res) => {
   await destroyUserSessions(user.id, req.sessionId);
   await audit({ actor: actorOf(user), action: 'auth.password_changed', entityType: 'user', entityId: user.id, ip: clientIp(req) });
   res.json({ user: publicUser((await findUserById(user.id))!) });
+});
+
+// --- Self-service password reset --------------------------------------------------------
+
+authRouter.get('/options', async (_req, res) => {
+  res.json({ emailEnabled: await isEmailEnabled() });
+});
+
+authRouter.post('/forgot', rateLimit({ windowMs: 15 * 60 * 1000, limit: 5 }), async (req, res) => {
+  const { login } = parseBody(z.object({ login: z.string().trim().min(1).max(255) }), req.body);
+  await requestPasswordReset(login, clientIp(req));
+  res.json({ ok: true });
+});
+
+authRouter.post('/reset', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20 }), async (req, res) => {
+  const { token, password } = parseBody(z.object({ token: z.string().min(20).max(200), password: z.string().max(1024) }), req.body);
+  const user = await resetPassword(token, password, clientIp(req));
+  res.json({ ok: true, username: user.username });
 });

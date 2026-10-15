@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import Add from '@mui/icons-material/Add';
 import Download from '@mui/icons-material/Download';
+import Email from '@mui/icons-material/Email';
 import Print from '@mui/icons-material/Print';
 import Delete from '@mui/icons-material/Delete';
 import QrCode2 from '@mui/icons-material/QrCode2';
@@ -32,6 +33,7 @@ import { api, errorMessage } from '../api';
 import { useAuth } from '../auth';
 import { qrImageUrl, type QrCode } from '../qr';
 import { ExportDialog, PrintDialog } from '../components/ExportDialog';
+import { EmailDialog, useEmailEnabled } from '../components/EmailDialog';
 
 const PAGE_SIZE = 24;
 
@@ -44,7 +46,9 @@ export function QrListPage() {
   const [all, setAll] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [action, setAction] = useState<{ kind: 'export' | 'print' | 'delete'; qr: QrCode } | null>(null);
+  const [action, setAction] = useState<{ kind: 'export' | 'print' | 'email' | 'delete'; qr: QrCode } | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+  const emailEnabled = useEmailEnabled();
 
   const load = useCallback(async () => {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String((page - 1) * PAGE_SIZE) });
@@ -113,6 +117,11 @@ export function QrListPage() {
         </Stack>
       </Stack>
       {error && <Alert severity="error">{error}</Alert>}
+      {sent && (
+        <Alert severity="success" onClose={() => setSent(null)}>
+          {sent}
+        </Alert>
+      )}
 
       {loaded && !items.length && (
         <Paper sx={{ p: 6, textAlign: 'center' }}>
@@ -157,6 +166,13 @@ export function QrListPage() {
                   <Print fontSize="small" />
                 </IconButton>
               </Tooltip>
+              {emailEnabled && (
+                <Tooltip title="Email">
+                  <IconButton size="small" onClick={() => setAction({ kind: 'email', qr })}>
+                    <Email fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
               <Box sx={{ flexGrow: 1 }} />
               <Tooltip title="Delete">
                 <IconButton size="small" onClick={() => setAction({ kind: 'delete', qr })}>
@@ -178,6 +194,7 @@ export function QrListPage() {
         <>
           <ExportDialog qrId={action.qr.id} open={action.kind === 'export'} onClose={() => setAction(null)} />
           <PrintDialog qrId={action.qr.id} open={action.kind === 'print'} onClose={() => setAction(null)} />
+          <EmailDialog qr={action.qr} open={action.kind === 'email'} onClose={() => setAction(null)} onSent={setSent} />
         </>
       )}
       <Dialog open={action?.kind === 'delete'} onClose={() => setAction(null)}>

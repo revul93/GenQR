@@ -319,6 +319,13 @@ GenQR/
 - **Safety:** only http/https targets; no embedded credentials; no loops back to `/short/`; an admin allowlist or blocklist of domains (subdomains included); redirects are rate-limited.
 - **Deleting** a QR code switches its link off.
 
+**Phase 5 status:** done.
+- **SMTP settings:** presets for Gmail (app password), Microsoft 365 and internal relays; STARTTLS/TLS/none; password encrypted; friendly error messages; a "send test" button that works with unsaved values.
+- **Global switch:** turning email off hides every email button and makes the API refuse.
+- **Sending QR codes:** to up to 10 recipients plus Cc, with a message, the code shown inline, the short link, and attachments in any mix of PNG/JPG/SVG/PDF/Word. Replies go to the sender. Limited to 30 per user per hour.
+- **Email log:** every message (QR, password reset, test) with its result, shown in Settings → Email.
+- **Self-service password reset** for local accounts: a one-hour single-use link. The response doesn't reveal whether an account exists (sending happens in the background), requests are rate-limited, and a reset signs the user out everywhere.
+
 Phase 7 comes late on purpose. Because Knex is used from day one and the tests run on all engines, the code is portable from the start. Only the switch wizard itself waits.
 
 ## 14. Remaining Open Questions

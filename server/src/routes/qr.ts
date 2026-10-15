@@ -1,4 +1,5 @@
 import { Router, type Request } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { clientIp, HttpError, parseBody } from '../http.js';
 import { requireAuth } from '../auth/middleware.js';
@@ -10,6 +11,7 @@ import { deleteLogo, getUsableLogo, listLogos, logoDataUri, readLogoFile, saveLo
 import { listPresets } from '../services/presets.js';
 import { createQr, getQr, listQr, softDeleteQr, svgRendererFor, updateQr, type QrInput } from '../services/qrCodes.js';
 import { sampleQrData, validateTarget } from '../services/shortLinks.js';
+import { escapeHtml, layout, sendMail } from '../services/email.js';
 
 export const qrRouter = Router();
 qrRouter.use(requireAuth);
@@ -160,3 +162,58 @@ qrRouter.get('/:id/export', async (req, res) => {
   const file = await exportQr(format as ExportFormat, await svgRendererFor(qr), resolved, background);
   res.attachment(`${slug(qr.title)}-${qr.id}.${format}`).type(EXPORT_TYPES[format as ExportFormat]).send(file);
 });
+
+// --- Email ----------------------------------------------------------------------------
+
+const FORMAT_ORDER: ExportFormat[] = ['png', 'jpg', 'svg', 'pdf', 'docx'];
+
+const emailSchema = z.object({
+  to: z.array(z.email()).min(1, 'Add at least one recipient.').max(10),
+  cc: z.array(z.email()).max(10).default([]),
+  subject: z.string().trim().min(1).max(200),
+  message: z.string().max(5000).default(''),
+  formats: z.array(z.enum(['png', 'jpg', 'svg', 'pdf', 'docx'])).min(1, 'Choose at least one format.').max(5),
+  imageSize: z.number().int().min(256).max(4096).default(1024),
+  printSizeCm: z.number().min(1).max(50).default(5),
+});
+
+qrRouter.post(
+  '/:id/email',
+  rateLimit({ windowMs: 60 * 60 * 1000, limit: 30, keyGenerator: (req) => `user:${req.user?.id}`, message: { error: 'Too many emails sent; try again later.' } }),
+  async (req, res) => {
+    const qr = await getQr(idOf(req), req.user!);
+    const body = parseBody(emailSchema, req.body);
+    const formats = FORMAT_ORDER.filter((f) => body.formats.includes(f));
+    const svgAt = await svgRendererFor(qr);
+    const background = qr.style.transparentBackground ? '#ffffff' : qr.style.background;
+    const name = slug(qr.title);
+
+    const attachments = await Promise.all(
+      formats.map(async (format) => ({
+        filename: `${name}-${qr.id}.${format}`,
+        contentType: EXPORT_TYPES[format],
+        content: await exportQr(format, svgAt, format === 'pdf' || format === 'docx' ? body.printSizeCm : body.imageSize, background),
+      })),
+    );
+    const inline = { filename: 'qr-code.png', contentType: 'image/png', cid: 'qrcode@genqr', content: await exportQr('png', svgAt, 300, background) };
+
+    const sender = req.user!;
+    const messageHtml = body.message ? `<p>${escapeHtml(body.message).replace(/\r?\n/g, '<br>')}</p>` : '';
+    const linkHtml = qr.shortLink ? `<p>Scan the code or open <a href="${escapeHtml(qr.shortLink.url)}">${escapeHtml(qr.shortLink.url)}</a></p>` : '';
+    const html = layout(
+      qr.title,
+      `${messageHtml}<p style="text-align:center"><img src="cid:qrcode@genqr" width="200" height="200" alt="QR code"></p>${linkHtml}` +
+        `<p style="color:#52606d;font-size:12px">Attached: ${formats.map((f) => f.toUpperCase()).join(', ')}. Sent by ${escapeHtml(sender.displayName)} via GenQR.</p>`,
+    );
+    const text = [body.message, qr.shortLink ? `Link: ${qr.shortLink.url}` : '', `Attached: ${formats.map((f) => f.toUpperCase()).join(', ')}`, `Sent by ${sender.displayName} via GenQR.`]
+      .filter(Boolean)
+      .join('\n\n');
+
+    await sendMail(
+      { to: body.to, cc: body.cc, replyTo: sender.email ?? undefined, subject: body.subject, text, html, attachments: [inline, ...attachments] },
+      { kind: 'qr', actor: actorOf(sender), qrCodeId: qr.id, formats },
+    );
+    await audit({ actor: actorOf(sender), action: 'qr.emailed', entityType: 'qr', entityId: qr.id, details: { title: qr.title, to: body.to, cc: body.cc, formats }, ip: clientIp(req) });
+    res.json({ ok: true });
+  },
+);

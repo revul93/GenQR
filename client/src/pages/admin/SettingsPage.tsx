@@ -22,6 +22,7 @@ import ErrorIcon from '@mui/icons-material/Error';
 import { api, errorMessage } from '../../api';
 import { BrandingSettings } from './BrandingSettings';
 import { LinkSettings } from './LinkSettings';
+import { EmailSettings } from './EmailSettings';
 
 interface AdConfig {
   enabled: boolean;
@@ -222,11 +223,13 @@ export function SettingsPage() {
           <Tab value="ad" label="Active Directory" />
           <Tab value="branding" label="Branding" />
           <Tab value="links" label="Short links" />
+          <Tab value="email" label="Email" />
         </Tabs>
         <Box sx={{ p: 3, maxWidth: 900 }}>
           {tab === 'ad' && <ActiveDirectorySettings />}
           {tab === 'branding' && <BrandingSettings />}
           {tab === 'links' && <LinkSettings />}
+          {tab === 'email' && <EmailSettings />}
         </Box>
       </Paper>
     </Stack>

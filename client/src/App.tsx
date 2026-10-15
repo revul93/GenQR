@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Navigate, Route, Routes } from 'react-router';
+import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from './auth';
 import { Layout } from './components/Layout';
@@ -10,6 +10,7 @@ import { QrListPage } from './pages/QrListPage';
 import { QrDesignerPage } from './pages/QrDesignerPage';
 import { QrPrintPage } from './pages/QrPrintPage';
 import { LinksPage } from './pages/LinksPage';
+import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPages';
 import { SystemPage } from './pages/admin/SystemPage';
 import { AuditPage } from './pages/admin/AuditPage';
 import { UsersPage } from './pages/admin/UsersPage';
@@ -22,6 +23,7 @@ function AdminOnly({ children }: { children: ReactNode }) {
 
 export function App() {
   const { loading, needsSetup, user } = useAuth();
+  const { pathname } = useLocation();
 
   if (loading) {
     return (
@@ -31,7 +33,9 @@ export function App() {
     );
   }
   if (needsSetup) return <SetupPage />;
-  if (!user) return <LoginPage />;
+  // Reset links work whether or not someone is signed in on this browser.
+  if (pathname === '/reset-password') return <ResetPasswordPage />;
+  if (!user) return pathname === '/forgot-password' ? <ForgotPasswordPage /> : <LoginPage />;
   if (user.mustChangePassword) return <ChangePasswordPage forced />;
 
   return (

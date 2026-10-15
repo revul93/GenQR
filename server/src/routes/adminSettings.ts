@@ -9,6 +9,7 @@ import { deletePreset, savePreset } from '../services/presets.js';
 import { qrStyleSchema } from '../qr/style.js';
 import { getLinkPolicy, linkPolicySchema, publicBaseUrl, saveLinkPolicy } from '../services/shortLinks.js';
 import { setSetting, SettingKeys } from '../services/settings.js';
+import { emailConfigSchema, getEmailConfig, listEmailLog, saveEmailConfig, sendTestEmail } from '../services/email.js';
 
 export const adminSettingsRouter = Router();
 adminSettingsRouter.use(requireAdmin);
@@ -95,4 +96,40 @@ adminSettingsRouter.put('/links', async (req, res) => {
   await saveLinkPolicy(body.policy, req.user!.id);
   await audit({ actor: actorOf(req.user!), action: 'settings.links_updated', details: { before, after: body }, ip: clientIp(req) });
   res.json(body);
+});
+
+// --- Email ----------------------------------------------------------------------------
+
+const emailSaveSchema = emailConfigSchema.extend({ password: z.string().max(1024).optional() });
+const emailTestSchema = emailSaveSchema.extend({ testRecipient: z.email('Enter an address to send the test to.') });
+
+adminSettingsRouter.get('/email', async (_req, res) => {
+  res.json({ config: await getEmailConfig() });
+});
+
+adminSettingsRouter.put('/email', async (req, res) => {
+  const { password, ...config } = parseBody(emailSaveSchema, req.body);
+  const before = await getEmailConfig();
+  await saveEmailConfig(config, password || undefined, req.user!.id);
+  await audit({
+    actor: actorOf(req.user!),
+    action: 'settings.email_updated',
+    details: { enabled: config.enabled, wasEnabled: before.enabled, host: config.host, port: config.port, security: config.security, from: config.fromAddress, passwordChanged: !!password },
+    ip: clientIp(req),
+  });
+  res.json({ config: await getEmailConfig() });
+});
+
+adminSettingsRouter.post('/email/test', async (req, res) => {
+  const { password, testRecipient, ...config } = parseBody(emailTestSchema, req.body);
+  await sendTestEmail(config, password || undefined, testRecipient, actorOf(req.user!));
+  res.json({ ok: true });
+});
+
+adminSettingsRouter.get('/email/log', async (req, res) => {
+  const { limit, offset } = parseBody(
+    z.object({ limit: z.coerce.number().int().min(1).max(200).default(50), offset: z.coerce.number().int().min(0).default(0) }),
+    req.query,
+  );
+  res.json(await listEmailLog(limit, offset));
 });

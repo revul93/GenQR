@@ -25,6 +25,7 @@ import {
   Typography,
 } from '@mui/material';
 import Download from '@mui/icons-material/Download';
+import Email from '@mui/icons-material/Email';
 import Print from '@mui/icons-material/Print';
 import Save from '@mui/icons-material/Save';
 import Upload from '@mui/icons-material/Upload';
@@ -38,6 +39,7 @@ import { useAuth } from '../auth';
 import { colourWarnings, DEFAULT_STYLE, fetchLogos, fetchPresets, linkState, logoUrl, svgDataUrl, uploadLogo, type ContentType, type Logo, type Preset, type QrCode, type QrShortLink, type QrStyle } from '../qr';
 import { ExportDialog, PrintDialog } from '../components/ExportDialog';
 import { CopyButton, LinkDialog, STATE_CHIP } from '../components/LinkDialog';
+import { EmailDialog, useEmailEnabled } from '../components/EmailDialog';
 
 interface Form {
   title: string;
@@ -108,7 +110,8 @@ export function QrDesignerPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ severity: 'success' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [dialog, setDialog] = useState<'export' | 'print' | 'preset' | 'link' | null>(null);
+  const [dialog, setDialog] = useState<'export' | 'print' | 'preset' | 'link' | 'email' | null>(null);
+  const emailEnabled = useEmailEnabled();
   const fileInput = useRef<HTMLInputElement>(null);
   const previewSeq = useRef(0);
 
@@ -491,6 +494,11 @@ export function QrDesignerPage() {
                   </Tooltip>
                 </Stack>
               )}
+              {qrId && emailEnabled && (
+                <Button variant="outlined" startIcon={<Email />} disabled={dirty} onClick={() => setDialog('email')}>
+                  Email
+                </Button>
+              )}
               {user?.role === 'admin' && (
                 <Button size="small" startIcon={<Bookmark />} onClick={() => setDialog('preset')}>
                   Save design as brand preset
@@ -506,6 +514,7 @@ export function QrDesignerPage() {
 
       {qrId && <ExportDialog qrId={qrId} open={dialog === 'export'} onClose={() => setDialog(null)} />}
       {qrId && <PrintDialog qrId={qrId} open={dialog === 'print'} onClose={() => setDialog(null)} />}
+      {qrId && <EmailDialog qr={{ id: qrId, title: form.title }} open={dialog === 'email'} onClose={() => setDialog(null)} onSent={(text) => setNotice({ severity: 'success', text })} />}
       <LinkDialog
         linkId={dialog === 'link' && link ? link.id : null}
         onClose={() => setDialog(null)}
