@@ -73,7 +73,8 @@ function Install-Package([string]$Id, [string]$Name, [switch]$Machine) {
 # --- Prerequisites ---------------------------------------------------------------------
 Update-Path
 $nodeVersion = 0
-if (Get-Command node -ErrorAction SilentlyContinue) { $nodeVersion = [int]((& node -p 'process.versions.node.split(".")[0]') | Out-String).Trim() }
+# Parsed in PowerShell: Windows PowerShell 5.1 strips the inner quotes of JavaScript passed to `node -e/-p`.
+if (Get-Command node -ErrorAction SilentlyContinue) { $nodeVersion = [int](((& node -v) | Out-String).Trim().TrimStart('v').Split('.')[0]) }
 if ($nodeVersion -lt $NodeMajor) { Install-Package 'OpenJS.NodeJS.LTS' 'Node.js LTS' -Machine }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Install-Package 'Git.Git' 'Git' -Machine }
 if (-not (Get-Command nssm -ErrorAction SilentlyContinue) -and -not (Test-Path (Join-Path $Dir 'bin\nssm.exe'))) { Install-Package 'NSSM.NSSM' 'NSSM' }
@@ -121,23 +122,33 @@ function Install-GenQRService {
     @('DisplayName', 'GenQR'),
     @('Description', 'GenQR - QR code generator and short-link service'),
     @('Start', 'SERVICE_AUTO_START'),
-    @('ObjectName', 'NT AUTHORITY\LocalService'),
     @('AppStdout', (Join-Path $Dir 'logs\service.log')),
     @('AppStderr', (Join-Path $Dir 'logs\service.log')),
+    # Rotate the log when the service starts. Online (live) rotation is off: with it on, NSSM
+    # hung in "Stop pending" after GenQR had already exited.
     @('AppRotateFiles', '1'),
-    @('AppRotateOnline', '1'),
+    @('AppRotateOnline', '0'),
     @('AppRotateBytes', '10485760'),
+    # GenQR shuts down on Ctrl+C (closes connections and the database); give it time, then
+    # fall back to stronger stop methods.
+    @('AppStopMethodConsole', '15000'),
+    @('AppStopMethodWindow', '3000'),
+    @('AppStopMethodThreads', '3000'),
     # Restart on any exit: the app exits on purpose to restart itself (e.g. after a database switch).
     @('AppExit', 'Default', 'Restart'),
     @('AppRestartDelay', '3000')
   )
   foreach ($s in $settings) { Invoke-Native { & $nssm set $Service @s } "Configuring the service ($($s[0]))" }
+  # Run as LocalService. Set through the service API: Windows PowerShell 5.1 drops the empty
+  # password argument NSSM would need.
+  $result = Get-CimInstance Win32_Service -Filter "Name='$Service'" | Invoke-CimMethod -MethodName Change -Arguments @{ StartName = 'NT AUTHORITY\LocalService'; StartPassword = '' }
+  if ($result.ReturnValue -ne 0) { throw "Could not set the service account (Win32_Service.Change returned $($result.ReturnValue))." }
   Invoke-Native { & $nssm set $Service AppEnvironmentExtra 'NODE_ENV=production' "GENQR_ROOT=$Dir" 'GENQR_SUPERVISED=1' "NPM_CONFIG_CACHE=$(Join-Path $Dir 'data\npm-cache')" } 'Configuring the service environment'
 
   # The "Update now" button drops data\update.request; this task (SYSTEM) checks every minute.
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -File "{0}" -FromUi' -f (Join-Path $Dir 'scripts\update.ps1'))
   $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
-  $taskPrincipal = New-ScheduledTaskPrincipal -UserId 'S-1-5-18' -LogonType ServiceAccount -RunLevel Highest
+  $taskPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
   $taskSettings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -StartWhenAvailable
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $taskPrincipal -Settings $taskSettings -Force | Out-Null
 
@@ -160,7 +171,9 @@ function Wait-Healthy {
 }
 
 # --- Existing installation -------------------------------------------------------------------
-if (Test-Path (Join-Path $Dir '.git')) {
+# A folder with .git but no build or .env is an earlier attempt that stopped part-way: resume it below.
+$installed = (Test-Path (Join-Path $Dir '.git')) -and (Test-Path (Join-Path $Dir 'server\dist\index.js')) -and (Test-Path (Join-Path $Dir '.env'))
+if ($installed) {
   Info "GenQR is already installed in $Dir - refreshing the service and update task"
   Invoke-Native { git -C $Dir fetch --quiet origin $Branch } 'Fetching updates'
   Invoke-Native { git -C $Dir merge --quiet --ff-only "origin/$Branch" } 'Applying updates (local changes in the GenQR folder prevent this; inspect with git status)'
@@ -173,19 +186,28 @@ if (Test-Path (Join-Path $Dir '.git')) {
 }
 
 # --- Fresh installation ------------------------------------------------------------------------
-if ((Test-Path $Dir) -and (Get-ChildItem $Dir -Force | Select-Object -First 1)) { throw "$Dir exists and is not empty. Remove it or set GENQR_DIR." }
-Info "Cloning $Repo ($Branch) into $Dir"
-Invoke-Native { git clone --quiet --branch $Branch $Repo $Dir } 'Cloning the repository'
+if (Test-Path (Join-Path $Dir '.git')) {
+  Info "Resuming an unfinished installation in $Dir"
+  Invoke-Native { git -C $Dir fetch --quiet origin $Branch } 'Fetching the code'
+  Invoke-Native { git -C $Dir merge --quiet --ff-only "origin/$Branch" } 'Updating the code (local changes in the GenQR folder prevent this; inspect with git status)'
+} else {
+  if ((Test-Path $Dir) -and (Get-ChildItem $Dir -Force | Select-Object -First 1)) { throw "$Dir exists and is not empty. Remove it or set GENQR_DIR." }
+  Info "Cloning $Repo ($Branch) into $Dir"
+  Invoke-Native { git clone --quiet --branch $Branch $Repo $Dir } 'Cloning the repository'
+}
 
 Info 'Installing dependencies and building (this can take a few minutes)'
 Push-Location $Dir
 try {
-  Invoke-Native { npm ci --include=dev --no-audit --no-fund --loglevel=error } 'npm ci'
-  Invoke-Native { npm run build --silent } 'Building'
+  # npm.cmd, not npm: PowerShell would pick npm.ps1, which a restrictive execution policy blocks.
+  Invoke-Native { npm.cmd ci --include=dev --no-audit --no-fund --loglevel=error } 'npm ci'
+  Invoke-Native { npm.cmd run build --silent } 'Building'
 
   Info 'Writing configuration'
   if (-not (Test-Path '.env')) {
-    $key = (& node -e 'console.log(require("crypto").randomBytes(32).toString("base64"))' | Out-String).Trim()
+    $bytes = New-Object byte[] 32
+    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $key = [Convert]::ToBase64String($bytes)
     (Get-Content '.env.example') -replace '^PORT=.*', "PORT=$Port" -replace '^HOST=.*', "HOST=$ListenHost" -replace '^ENCRYPTION_KEY=.*', "ENCRYPTION_KEY=$key" |
       Set-Content -Path '.env' -Encoding ASCII
   }

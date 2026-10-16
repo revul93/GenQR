@@ -61,15 +61,17 @@ function Write-Status([string]$State, [string]$Message) {
   Move-Item -Path $tmp -Destination $StatusFile -Force
 }
 
-function Git { $gitArgs = $args; Invoke-GenQRNative -What "git $($gitArgs -join ' ')" -LogFile $LogFile -Command { & git -C $Root @gitArgs } }
-function Git-Output { (& git -C $Root @args 2>$null | Out-String).Trim() }
+# Named Invoke-Git, and calling git.exe: PowerShell names are case-insensitive, so a function
+# called "Git" would call itself instead of git.
+function Invoke-Git { $gitArgs = $args; Invoke-GenQRNative -What "git $($gitArgs -join ' ')" -LogFile $LogFile -Command { & git.exe -C $Root @gitArgs } }
+function Get-GitOutput { (& git.exe -C $Root @args 2>$null | Out-String).Trim() }
 function Cli([string]$What) { $cliArgs = $args; Invoke-GenQRNative -What $What -LogFile $LogFile -Command { Invoke-GenQRCli @cliArgs } }
 
 function Build-App {
   Push-Location $Root
   try {
-    Invoke-GenQRNative -What 'npm ci' -LogFile $LogFile -Command { & npm ci --include=dev --no-audit --no-fund --loglevel=error }
-    Invoke-GenQRNative -What 'npm run build' -LogFile $LogFile -Command { & npm run build --silent }
+    Invoke-GenQRNative -What 'npm ci' -LogFile $LogFile -Command { & npm.cmd ci --include=dev --no-audit --no-fund --loglevel=error }
+    Invoke-GenQRNative -What 'npm run build' -LogFile $LogFile -Command { & npm.cmd run build --silent }
   } finally { Pop-Location }
 }
 
@@ -94,7 +96,7 @@ function Invoke-Rollback([string]$Reason) {
   try {
     if ($script:Migrated -and -not (Test-Path (Join-Path $Backup 'genqr.db'))) { Cli 'Undoing migrations' migrate-rollback }
   } catch { Log "Undoing the migrations failed: $_" }
-  try { Git reset --hard $OldCommit; Build-App } catch { Log "Rebuilding the previous version failed: $_" }
+  try { Invoke-Git reset --hard $OldCommit; Build-App } catch { Log "Rebuilding the previous version failed: $_" }
   $dump = Join-Path $Backup 'genqr-dump.json.gz'
   if (Test-Path $dump) {
     Log "Restoring database contents from $dump"
@@ -146,7 +148,7 @@ if ($Continue) {
   if (-not (Wait-GenQRHealthy -Commit $NewCommit)) { Invoke-Rollback 'The new version did not become healthy' }
 
   $done = "Updated to $($NewCommit.Substring(0,7))"
-  & git -C $Root diff --quiet $OldCommit $NewCommit -- scripts/install.ps1 2>$null
+  & git.exe -C $Root diff --quiet $OldCommit $NewCommit -- scripts/install.ps1 2>$null
   if ($LASTEXITCODE -ne 0) {
     $done += '. The installer changed: re-run install.ps1 to apply service changes.'
     Log 'NOTE: this version changes install.ps1. Re-run it (as administrator) to apply service and task changes.'
@@ -182,19 +184,19 @@ try {
   New-Item -ItemType File -Force -Path $LogFile | Out-Null
 
   Log "GenQR update started by $RequestedBy"
-  $OldCommit = Git-Output rev-parse HEAD
-  $branch = Git-Output rev-parse --abbrev-ref HEAD
+  $OldCommit = Get-GitOutput rev-parse HEAD
+  $branch = Get-GitOutput rev-parse --abbrev-ref HEAD
   Write-Status 'running' 'Checking for updates'
 
-  if (Git-Output status --porcelain --untracked-files=no) {
+  if (Get-GitOutput status --porcelain --untracked-files=no) {
     Log 'ERROR: tracked files were modified locally; refusing to update.'
     Write-Status 'failed' "Tracked files were modified locally in $Root; refusing to update."
     exit 1
   }
 
   Log "Fetching origin/$branch"
-  try { Git fetch --prune origin $branch } catch { Write-Status 'failed' 'Could not fetch from the git remote'; throw }
-  $NewCommit = Git-Output rev-parse "origin/$branch"
+  try { Invoke-Git fetch --prune origin $branch } catch { Write-Status 'failed' 'Could not fetch from the git remote'; throw }
+  $NewCommit = Get-GitOutput rev-parse "origin/$branch"
 
   if ($NewCommit -eq $OldCommit -and -not $Force) {
     Log "Already up to date ($($OldCommit.Substring(0,7)))"
@@ -214,7 +216,7 @@ try {
 
   Log 'Applying new code'
   Write-Status 'running' "Installing $($NewCommit.Substring(0,7))"
-  try { Git merge --ff-only "origin/$branch" } catch { Invoke-Rollback "Applying the new code failed: $($_.Exception.Message)" }
+  try { Invoke-Git merge --ff-only "origin/$branch" } catch { Invoke-Rollback "Applying the new code failed: $($_.Exception.Message)" }
 
   # Hand over to the update.ps1 that was just pulled (the lock stays held by this process).
   $env:GENQR_UPDATE_OLD = $OldCommit
