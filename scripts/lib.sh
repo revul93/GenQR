@@ -42,7 +42,7 @@ build_app() {
 secure_files() {
   local d
   for d in data logs backups config; do
-    [ -d "$GENQR_DIR/$d" ] && as_app chmod -R o-rwx,g-w "$GENQR_DIR/$d" 2> /dev/null
+    [ -d "$GENQR_DIR/$d" ] && { as_app chmod -R o-rwx,g-w "$GENQR_DIR/$d" 2> /dev/null || true; }
   done
   [ -f "$GENQR_DIR/.env" ] && as_app chmod 600 "$GENQR_DIR/.env"
   return 0
