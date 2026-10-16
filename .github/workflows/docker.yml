@@ -1,0 +1,148 @@
+name: Docker image
+
+# Builds the image, runs a smoke test against a real container (setup, sign-in, QR code,
+# redirect, export, persistence across restarts, switching to PostgreSQL inside Docker),
+# and only then pushes multi-architecture images.
+#
+# Registries:
+#   - GitHub Container Registry: ghcr.io/<owner>/genqr (always; uses the workflow token)
+#   - Docker Hub: <DOCKERHUB_USERNAME>/genqr, only when the repository secrets
+#     DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are set
+#
+# Tags: `latest` and `sha-<short>` from main; `1.2.3`, `1.2` and `1` from git tags `v1.2.3`.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: genqr
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image (amd64)
+        run: docker build --build-arg GENQR_COMMIT=${{ github.sha }} -t genqr:test .
+
+      - name: Start GenQR and PostgreSQL
+        run: |
+          docker network create genqr-net
+          docker run -d --name pg --network genqr-net \
+            -e POSTGRES_DB=genqr -e POSTGRES_USER=genqr -e POSTGRES_PASSWORD=ci-pg-password postgres:17
+          docker run -d --name genqr --network genqr-net --restart unless-stopped -p 3000:3000 \
+            -e ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+            -v genqr-data:/app/data -v genqr-config:/app/config genqr:test
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:3000/api/health && break; sleep 2; done
+          docker ps
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          B=http://127.0.0.1:3000/api; J='Content-Type: application/json'; C=$(mktemp)
+          # Each check must pass; a failure stops the job.
+          assert() { if eval "$1"; then echo "✓ $2"; else echo "✗ $2"; exit 1; fi; }
+          wait_up() { for i in $(seq 1 60); do curl -fsS $B/health > /dev/null 2>&1 && return 0; sleep 2; done; return 1; }
+
+          assert '[ "$(docker exec genqr id -u)" != "0" ]' "runs as a non-root user"
+          assert '! docker exec genqr sh -c "touch /app/server/dist/x" 2> /dev/null' "application code is read-only"
+
+          TOKEN=$(docker exec genqr genqr setup-token)
+          curl -fsS -c $C -H "$J" -d "{\"token\":\"$TOKEN\",\"username\":\"admin\",\"displayName\":\"Admin\",\"email\":\"admin@example.com\",\"password\":\"AdminPass123\",\"publicBaseUrl\":\"http://localhost:3000\"}" $B/setup > /dev/null
+          echo "✓ first-launch setup"
+
+          QR=$(curl -fsS -b $C -H "$J" -d '{"title":"Smoke","contentType":"url","content":"https://example.com/smoke","style":{"moduleShape":"dots"}}' $B/qr)
+          ID=$(echo "$QR" | jq -r .qr.id); CODE=$(echo "$QR" | jq -r .qr.shortLink.code)
+          assert '[ "$(curl -s -o /dev/null -w "%{http_code} %{redirect_url}" "http://127.0.0.1:3000/short/$CODE?s=qr")" = "302 https://example.com/smoke" ]' "short link redirects"
+          for f in png jpg svg pdf docx; do curl -fsS -b $C -o /tmp/qr.$f "$B/qr/$ID/export?format=$f"; done
+          assert 'file /tmp/qr.png | grep -q PNG && file /tmp/qr.pdf | grep -q PDF && file /tmp/qr.docx | grep -qi "zip\|word"' "exports work in the image (sharp, pdfkit, docx)"
+          assert 'curl -fsS -b $C -H "$J" -d "{\"contentType\":\"text\",\"content\":\"hi\",\"style\":{}}" $B/qr/preview | jq -e .scannable > /dev/null' "preview scan check"
+
+          docker restart genqr > /dev/null; wait_up
+          curl -fsS -c $C -H "$J" -d '{"username":"admin","password":"AdminPass123"}' $B/auth/login > /dev/null
+          assert '[ "$(curl -fsS -b $C "$B/qr?all=1" | jq .total)" = "1" ]' "data survives a container restart"
+
+          assert '[ "$(docker exec genqr genqr db-status | sed -n "s/^engine: *//p")" = "sqlite" ]' "starts on SQLite"
+          curl -fsS -b $C -H "$J" -d '{"client":"pg","host":"pg","port":5432,"database":"genqr","user":"genqr","password":"ci-pg-password"}' $B/admin/database/switch > /dev/null
+          st=""
+          for i in $(seq 1 90); do
+            st=$(curl -s -b $C $B/admin/database/status | jq -r .state 2> /dev/null || true)
+            case "$st" in done | failed | reverted) break ;; esac
+            sleep 2
+          done
+          assert '[ "$st" = done ]' "database switch finished (state: $st)"
+          assert '[ "$(curl -fsS -b $C $B/admin/database | jq -r .current.client)" = "pg" ]' "running on PostgreSQL (baked-in driver, self-restart)"
+          assert '[ "$(curl -fsS -b $C "$B/qr?all=1" | jq .total)" = "1" ]' "data copied to PostgreSQL"
+          assert 'docker exec genqr genqr backup /app/backups/smoke.json.gz > /dev/null' "backup inside the container"
+
+      - name: Container logs
+        if: always()
+        run: docker logs genqr 2>&1 | tail -60
+
+  publish:
+    needs: smoke-test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      # Optional Docker Hub publishing: set these repository secrets to enable it.
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME && format('{0}/genqr', secrets.DOCKERHUB_USERNAME) || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub (optional)
+        if: env.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Image names and tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+            ${{ env.DOCKERHUB_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - name: Version from package.json
+        id: version
+        run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push (amd64 + arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GENQR_COMMIT=${{ github.sha }}
+            GENQR_VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

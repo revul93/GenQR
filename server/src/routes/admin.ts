@@ -4,7 +4,7 @@ import { dbClient } from '../db/index.js';
 import { clientIp, HttpError, parseBody } from '../http.js';
 import { requireAdmin } from '../auth/middleware.js';
 import { actorOf, audit, listAudit } from '../services/audit.js';
-import { checkForUpdates, getVersionInfo, isUpdateInProgress, readUpdateLog, readUpdateStatus, requestUpdate } from '../services/system.js';
+import { checkForUpdates, getVersionInfo, inContainer, isUpdateInProgress, readUpdateLog, readUpdateStatus, requestUpdate } from '../services/system.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -27,6 +27,7 @@ adminRouter.get('/system', async (_req, res) => {
     node: process.version,
     platform: `${process.platform}-${process.arch}`,
     uptimeSeconds: Math.round(process.uptime()),
+    runtime: inContainer() ? 'container' : 'server',
     update: readUpdateStatus(),
   });
 });
@@ -36,6 +37,7 @@ adminRouter.post('/system/check-updates', async (_req, res) => {
 });
 
 adminRouter.post('/system/update', async (req, res) => {
+  if (inContainer()) throw new HttpError(409, 'GenQR runs in a container: update it by pulling the new image and recreating the container.', 'CONTAINER');
   if (isUpdateInProgress()) throw new HttpError(409, 'An update is already in progress.', 'UPDATE_IN_PROGRESS');
   requestUpdate(req.user!.username);
   await audit({ actor: actorOf(req.user!), action: 'system.update_requested', details: { fromCommit: (await getVersionInfo()).commit }, ip: clientIp(req) });

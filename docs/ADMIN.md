@@ -2,7 +2,7 @@
 
 This guide covers installing, configuring, operating and securing GenQR. For what GenQR does and how it is built, see [PLAN.md](../PLAN.md).
 
-- [1. Installing](#1-installing)
+- [1. Installing](#1-installing) (Linux, Windows, Docker)
 - [2. HTTPS and the public address](#2-https-and-the-public-address)
 - [3. First launch](#3-first-launch)
 - [4. Users and Active Directory](#4-users-and-active-directory)
@@ -66,6 +66,47 @@ The installer:
 - opens the port in Windows Firewall
 
 > If winget isn't available (some Windows Server editions), install Node.js 22 LTS, Git and NSSM yourself first, then run the installer.
+
+### Docker
+
+An image is published for every change on `main` (tags `latest` and `sha-<commit>`) and for every release tag `vX.Y.Z`, for amd64 and arm64:
+
+```
+ghcr.io/revul93/genqr
+```
+
+With Docker Compose ([`docker-compose.yml`](../docker-compose.yml) in the repository):
+
+```bash
+echo "ENCRYPTION_KEY=$(openssl rand -base64 32)" > .env
+docker compose up -d
+docker compose logs genqr        # shows the setup token
+```
+
+Or with plain Docker:
+
+```bash
+docker run -d --name genqr --restart unless-stopped -p 3000:3000   -e ENCRYPTION_KEY="<base64 key>"   -v genqr-data:/app/data -v genqr-config:/app/config   -v genqr-logs:/app/logs -v genqr-backups:/app/backups   ghcr.io/revul93/genqr:latest
+```
+
+- **Keep `ENCRYPTION_KEY` safe and identical across upgrades.** It decrypts the stored AD, SMTP and database passwords.
+- **Data lives in the volumes:**
+  - `/app/data`: SQLite database, logos, GeoIP file
+  - `/app/config`: database settings
+  - `/app/backups`
+  - `/app/logs`
+- **Use a restart policy** (`unless-stopped`). GenQR restarts itself after a database switch.
+- **Command-line tools** run inside the container with `genqr`:
+  - `docker exec -it genqr genqr setup-token`
+  - `docker exec -it genqr genqr reset-password admin --unlock`
+  - `docker exec genqr genqr backup /app/backups/genqr-$(date +%F).json.gz`
+  - `docker exec genqr genqr help`
+- **Updating:** `docker compose pull && docker compose up -d` (or pull and recreate the container). Migrations run automatically at startup. Back up first, e.g. with `genqr backup`. The "Update now" button is replaced by these instructions in containers.
+- **PostgreSQL / MySQL** drivers are built into the image. `docker compose --profile postgres up -d` also starts a PostgreSQL container: switch to it in Settings → Database (host `postgres`).
+- **Behind a reverse-proxy container**, GenQR trusts `X-Forwarded-*` headers from private networks (`TRUST_PROXY` in the image).
+- **Hardening:** the image runs as the unprivileged `node` user, and the application code is read-only to it.
+- **Registry access:** the GitHub Container Registry package is private by default. Either make it public (GitHub → your profile → Packages → genqr → Package settings → Change visibility) or log in before pulling: `docker login ghcr.io`, using a token with `read:packages`.
+- **Docker Hub:** to also publish there, add the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. The workflow then pushes `<username>/genqr` as well.
 
 ### Re-running the installer
 

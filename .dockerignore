@@ -1,0 +1,21 @@
+# Keep the build context small and free of secrets and local state.
+.git
+.github
+**/node_modules
+**/dist
+drivers
+data
+config/*.json
+!config/database.example.json
+logs
+backups
+bin
+.env
+.env.*
+!.env.example
+.npm
+.cache
+*.log
+*.db
+*.db-*
+docs

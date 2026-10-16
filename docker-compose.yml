@@ -1,0 +1,43 @@
+# GenQR with Docker Compose.
+#
+#   1. Create a .env file next to this one with at least:
+#        ENCRYPTION_KEY=<output of: openssl rand -base64 32>
+#   2. docker compose up -d
+#   3. docker compose logs genqr      # shows the first-launch setup token
+#
+# To use PostgreSQL instead of SQLite: `docker compose --profile postgres up -d`, then in
+# GenQR go to Settings -> Database and switch to host "postgres", database/user "genqr",
+# password = POSTGRES_PASSWORD from your .env.
+services:
+  genqr:
+    image: ${GENQR_IMAGE:-ghcr.io/revul93/genqr:latest}
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${GENQR_PORT:-3000}:3000"
+    environment:
+      # Required: keep it safe and identical across upgrades (it decrypts stored secrets).
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env (openssl rand -base64 32)}
+    volumes:
+      - genqr-data:/app/data
+      - genqr-config:/app/config
+      - genqr-logs:/app/logs
+      - genqr-backups:/app/backups
+
+  postgres:
+    image: postgres:17
+    profiles: [postgres]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: genqr
+      POSTGRES_USER: genqr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - genqr-postgres:/var/lib/postgresql/data
+
+volumes:
+  genqr-data:
+  genqr-config:
+  genqr-logs:
+  genqr-backups:
+  genqr-postgres:

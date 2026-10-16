@@ -40,6 +40,7 @@ interface SystemInfo {
   node: string;
   platform: string;
   uptimeSeconds: number;
+  runtime: 'container' | 'server';
   update: UpdateStatus;
 }
 
@@ -168,6 +169,18 @@ export function SystemPage() {
         </Table>
       </Paper>
 
+      {info.runtime === 'container' ? (
+        <Paper sx={{ p: 2 }}>
+          <Stack spacing={1}>
+            <Typography variant="h6">Updates</Typography>
+            <Typography variant="body2" color="text.secondary">
+              GenQR runs in a container. To update, pull the new image and recreate the container; database changes are applied automatically when it
+              starts. With Docker Compose: <code>docker compose pull &amp;&amp; docker compose up -d</code>. Back up the data volume first (see the
+              administrator guide).
+            </Typography>
+          </Stack>
+        </Paper>
+      ) : (
       <Paper sx={{ p: 2 }}>
         <Stack spacing={2}>
           <Typography variant="h6">Updates</Typography>
@@ -217,6 +230,7 @@ export function SystemPage() {
           )}
         </Stack>
       </Paper>
+      )}
 
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
         <DialogTitle>Update GenQR now?</DialogTitle>

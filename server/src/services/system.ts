@@ -6,6 +6,9 @@ import { DATA_DIR, LOG_DIR, ROOT_DIR, ensureDir, readAppVersion } from '../confi
 
 const run = promisify(execFile);
 
+/** Container images are updated by pulling a new image, not by git (see Dockerfile). */
+export const inContainer = () => process.env.GENQR_RUNTIME === 'container';
+
 // Shared with scripts/update.sh: the web app only drops a request file; a separate,
 // privileged job (systemd genqr-update.path → genqr-update.service) performs the update.
 export const UPDATE_REQUEST_FILE = path.join(DATA_DIR, 'update.request');
@@ -40,7 +43,14 @@ export async function getVersionInfo(): Promise<VersionInfo> {
     git('log', '-1', '--format=%cI%n%s'),
   ]);
   const [commitDate, commitSubject] = log ? log.split('\n') : [null, null];
-  cachedVersion = { version: readAppVersion(), commit, branch, commitDate: commitDate ?? null, commitSubject: commitSubject ?? null };
+  cachedVersion = {
+    version: readAppVersion(),
+    // Images have no .git; the build passes the commit in.
+    commit: commit ?? (process.env.GENQR_COMMIT && process.env.GENQR_COMMIT !== 'unknown' ? process.env.GENQR_COMMIT : null),
+    branch,
+    commitDate: commitDate ?? null,
+    commitSubject: commitSubject ?? null,
+  };
   return cachedVersion;
 }
 
@@ -51,6 +61,7 @@ export interface UpdateCheck {
 }
 
 export async function checkForUpdates(): Promise<UpdateCheck> {
+  if (inContainer()) return { remoteCommit: null, updateAvailable: false, error: 'GenQR runs in a container: update it by pulling the new image and recreating the container.' };
   const { commit, branch } = await getVersionInfo();
   if (!commit || !branch) return { remoteCommit: null, updateAvailable: false, error: 'This installation is not a git checkout.' };
   const out = await git('ls-remote', 'origin', `refs/heads/${branch}`);

@@ -17,6 +17,13 @@ curl -fsSL https://raw.githubusercontent.com/revul93/GenQR/main/scripts/install.
 irm https://raw.githubusercontent.com/revul93/GenQR/main/scripts/install.ps1 | iex
 ```
 
+**Docker:**
+
+```bash
+echo "ENCRYPTION_KEY=$(openssl rand -base64 32)" > .env
+docker compose up -d     # image: ghcr.io/revul93/genqr (amd64 + arm64)
+```
+
 The **[administrator guide](docs/ADMIN.md)** covers HTTPS, Active Directory, email, databases, backups, updates, security and troubleshooting.
 
 The Linux installer:

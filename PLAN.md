@@ -355,6 +355,11 @@ GenQR/
 - **Automated tests:** 53 Vitest/Supertest tests, passing on SQLite, PostgreSQL 18 and MariaDB 11.8. GitHub Actions runs all three engines on every push.
 - **Docs:** [docs/ADMIN.md](docs/ADMIN.md), the administrator guide.
 
+**Docker:**
+- Multi-stage `Dockerfile` (runs as non-root; code read-only to the app; PostgreSQL/MySQL drivers baked in; health check) and `docker-compose.yml`, with an optional PostgreSQL profile.
+- The CI workflow builds the image and smoke-tests a real container: setup, sign-in, QR code, redirect, exports, a restart, and a switch to PostgreSQL inside Docker. It then publishes amd64+arm64 images to `ghcr.io/revul93/genqr` (and to Docker Hub if credentials are configured).
+- In a container, the System page explains image-based updates instead of offering "Update now".
+
 Phase 7 comes late on purpose. Because Knex is used from day one and the tests run on all engines, the code is portable from the start. Only the switch wizard itself waits.
 
 ## 14. Remaining Open Questions
