@@ -174,9 +174,15 @@ if [ -d "$GENQR_DIR/.git" ]; then
     [ -e "$f" ] && chown "$GENQR_USER:" "$f"
   done
   systemctl enable --now genqr-update.path > /dev/null 2>&1
+
+  # Bring the code to the latest version first, so the updater that runs next is the
+  # current one (older updaters expected to run as root).
   info "Updating GenQR"
+  as_app git fetch --quiet origin "$GENQR_BRANCH" || die "Could not fetch from $GENQR_REPO."
+  as_app git merge --quiet --ff-only "origin/$GENQR_BRANCH" || die "Local changes in $GENQR_DIR prevent updating; inspect with: git -C $GENQR_DIR status"
   trap - ERR
-  exec runuser -u "$GENQR_USER" -- env HOME="$GENQR_DIR" "$GENQR_DIR/scripts/update.sh"
+  # --force: rebuild, migrate and restart on the code just pulled (it backs up the database first).
+  exec runuser -u "$GENQR_USER" -- env HOME="$GENQR_DIR" "$GENQR_DIR/scripts/update.sh" --force
 fi
 
 # --- Fresh installation -------------------------------------------------------------

@@ -37,11 +37,12 @@ build_app() {
   as_app npm run build --silent
 }
 
-# Keep secrets, the database, logs and backups away from other local users.
+# Keep secrets, the database, logs and backups away from other local users. Best effort:
+# files left behind by older root-run updaters can't be changed and are skipped.
 secure_files() {
   local d
   for d in data logs backups config; do
-    [ -d "$GENQR_DIR/$d" ] && as_app chmod -R o-rwx,g-w "$GENQR_DIR/$d"
+    [ -d "$GENQR_DIR/$d" ] && as_app chmod -R o-rwx,g-w "$GENQR_DIR/$d" 2> /dev/null
   done
   [ -f "$GENQR_DIR/.env" ] && as_app chmod 600 "$GENQR_DIR/.env"
   return 0
