@@ -109,7 +109,10 @@ export async function unlockUser(id: number): Promise<void> {
 }
 
 export async function recordLoginFailure(user: UserRecord): Promise<void> {
-  const failed = user.failedLogins + 1;
+  // After a lock has expired the count starts again; otherwise one bad attempt would re-lock
+  // the account, letting anyone keep it locked indefinitely.
+  const lockExpired = user.lockedUntil != null && user.lockedUntil <= Date.now();
+  const failed = (lockExpired ? 0 : user.failedLogins) + 1;
   await db()('users')
     .where({ id: user.id })
     .update({
@@ -165,6 +168,11 @@ export async function deleteUser(id: number): Promise<void> {
 export async function countActiveAdmins(): Promise<number> {
   const row = await db()('users').where({ role: 'admin', is_active: true }).count({ n: '*' }).first();
   return Number(row?.n ?? 0);
+}
+
+/** Invalidates emailed reset links, e.g. after an admin reset or when the account is disabled. */
+export async function revokePasswordResets(id: number): Promise<void> {
+  await db()('password_resets').where({ user_id: id }).delete();
 }
 
 export async function clearLockout(id: number): Promise<void> {

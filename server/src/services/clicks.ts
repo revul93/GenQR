@@ -56,6 +56,8 @@ export function geoipStatus(): { installed: boolean; path: string; updatedAt: nu
 
 // --- Recording ----------------------------------------------------------------------------
 
+const DEDUPE_MS = 10_000;
+
 const visitorKey = crypto.createHash('sha256').update(`genqr-visitor:${env.encryptionKey || 'dev'}`).digest();
 
 function visitorHash(ip: string | null, userAgent: string): string {
@@ -83,6 +85,10 @@ function referrerHost(req: Request): string | null {
 export async function recordClick(linkId: number, req: Request): Promise<void> {
   try {
     const ua = (req.get('user-agent') ?? '').slice(0, 1000);
+    const visitor = visitorHash(req.ip ?? null, ua);
+    // Reloads and click floods from one visitor within a few seconds count once.
+    const recent = await db()('clicks').where({ short_link_id: linkId, visitor }).where('ts', '>', Date.now() - DEDUPE_MS).first('id');
+    if (recent) return;
     const parsed = new UAParser(ua).getResult();
     const cfg = await getAnalyticsConfig();
     await db()('clicks').insert({
@@ -94,7 +100,7 @@ export async function recordClick(linkId: number, req: Request): Promise<void> {
       os: parsed.os.name?.slice(0, 50) ?? null,
       device: deviceOf(parsed.device.type),
       country: cfg.geoip ? await geoLookup(req.ip ?? null) : null,
-      visitor: visitorHash(req.ip ?? null, ua),
+      visitor,
       is_bot: !ua || isbot(ua),
     });
   } catch (err) {

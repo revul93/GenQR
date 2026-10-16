@@ -11,7 +11,7 @@ import { audit } from '../services/audit.js';
 import { destroyUserSessions } from '../services/sessions.js';
 import { readSetupToken } from '../services/setupToken.js';
 import { getVersionInfo } from '../services/system.js';
-import { countUsers, findUserByUsername, setPasswordHash, unlockUser } from '../services/users.js';
+import { countUsers, findUserByUsername, revokePasswordResets, setPasswordHash, unlockUser } from '../services/users.js';
 import { promptHidden, readStdin } from './prompt.js';
 
 const cliActor = () => ({ id: null, name: `cli:${os.userInfo().username}` });
@@ -71,6 +71,7 @@ async function resetPassword(args: string[]): Promise<void> {
   await setPasswordHash(user.id, await hashPassword(password), !!values['must-change']);
   if (values.unlock) await unlockUser(user.id);
   await destroyUserSessions(user.id);
+  await revokePasswordResets(user.id);
   await audit({
     actor: cliActor(),
     action: 'user.password_reset',

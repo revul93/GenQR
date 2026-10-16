@@ -18,6 +18,7 @@ import {
   publicUser,
   setPasswordHash,
   clearLockout,
+  revokePasswordResets,
   updateUser,
   type UserRecord,
 } from '../services/users.js';
@@ -148,7 +149,10 @@ adminUsersRouter.patch('/:id', async (req, res) => {
   }
 
   await updateUser(target.id, patch);
-  if (patch.isActive === false) await destroyUserSessions(target.id);
+  if (patch.isActive === false) {
+    await destroyUserSessions(target.id);
+    await revokePasswordResets(target.id);
+  }
 
   const changes = Object.fromEntries(
     Object.entries(patch).map(([k, v]) => [k, { from: (target as unknown as Record<string, unknown>)[k], to: v }]),
@@ -166,6 +170,7 @@ adminUsersRouter.post('/:id/reset-password', async (req, res) => {
 
   await setPasswordHash(target.id, await hashPassword(password), mustChangePassword);
   await clearLockout(target.id);
+  await revokePasswordResets(target.id);
   await destroyUserSessions(target.id, target.id === req.user!.id ? req.sessionId : undefined);
   await audit({ actor: actorOf(req.user!), action: 'user.password_reset', entityType: 'user', entityId: target.id, details: { username: target.username, mustChangePassword }, ip: clientIp(req) });
   res.json({ user: publicUser((await findUserById(target.id))!) });

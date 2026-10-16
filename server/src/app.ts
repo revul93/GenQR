@@ -33,7 +33,10 @@ export function createApp(): express.Express {
   api.use(sessionMiddleware);
   api.use(maintenanceGuard);
 
-  api.get('/health', async (_req, res) => {
+  api.get('/health', async (req, res) => {
+    // Version details help an attacker more than a load balancer: only local callers get them.
+    const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress ?? '') && !req.get('x-forwarded-for');
+    if (!local) return void res.json({ status: 'ok' });
     const { version, commit } = await getVersionInfo();
     res.json({ status: 'ok', version, commit, database: dbClient() });
   });

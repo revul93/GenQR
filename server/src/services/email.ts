@@ -157,6 +157,13 @@ export async function sendMail(mail: OutgoingMail, meta: LogMeta): Promise<void>
 }
 
 export async function sendTestEmail(cfg: EmailConfig, passwordOverride: string | undefined, to: string, actor: Actor): Promise<void> {
+  if (!passwordOverride && cfg.username) {
+    // Never send the saved password to a server or account other than the saved one.
+    const saved = await getEmailConfig();
+    if (saved.host !== cfg.host || saved.port !== cfg.port || saved.username !== cfg.username || saved.security !== cfg.security) {
+      throw new HttpError(400, 'The server or username changed: type the password again to test.', 'PASSWORD_REQUIRED');
+    }
+  }
   const mail: OutgoingMail = {
     to: [to],
     subject: 'GenQR test email',

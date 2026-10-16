@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (${{ matrix.db }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite, postgres, mariadb]
+    services:
+      postgres:
+        image: ${{ matrix.db == 'postgres' && 'postgres:17' || '' }}
+        env:
+          POSTGRES_USER: genqr_test
+          POSTGRES_PASSWORD: ci-password-123
+          POSTGRES_DB: genqr_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U genqr_test" --health-interval 5s --health-timeout 5s --health-retries 20
+      mariadb:
+        image: ${{ matrix.db == 'mariadb' && 'mariadb:11' || '' }}
+        env:
+          MARIADB_USER: genqr_test
+          MARIADB_PASSWORD: ci-password-123
+          MARIADB_DATABASE: genqr_test
+          MARIADB_ROOT_PASSWORD: ci-root-password
+        ports: ['3306:3306']
+        options: --health-cmd "healthcheck.sh --connect --innodb_initialized" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Install database drivers (pinned in drivers.manifest.json)
+        if: matrix.db != 'sqlite'
+        run: |
+          mkdir -p /tmp/drivers && echo '{"private":true}' > /tmp/drivers/package.json
+          node -e "const m=require('./drivers.manifest.json');console.log(Object.values(m).filter(d=>d.package!=='tedious').map(d=>d.package+'@'+d.version).join(' '))" \
+            | xargs npm install --prefix /tmp/drivers --no-audit --no-fund
+      - name: Test
+        run: npm test
+        env:
+          GENQR_TEST_DRIVERS: ${{ matrix.db != 'sqlite' && '/tmp/drivers' || '' }}
+          GENQR_TEST_DB: >-
+            ${{ matrix.db == 'postgres' && '{"client":"pg","connection":{"host":"127.0.0.1","port":5432,"database":"genqr_test","user":"genqr_test","ssl":false,"verifyCertificate":true},"password":"ci-password-123"}'
+            || matrix.db == 'mariadb' && '{"client":"mysql","connection":{"host":"127.0.0.1","port":3306,"database":"genqr_test","user":"genqr_test","ssl":false,"verifyCertificate":true},"password":"ci-password-123"}'
+            || '' }}
+

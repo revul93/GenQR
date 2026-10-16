@@ -5,10 +5,12 @@
 #   genqrctl update            update if a newer commit exists on the tracked branch
 #   genqrctl update --force    rebuild and restart even when already up to date
 #
-# Also started by systemd (genqr-update.path → genqr-update.service) when an admin
-# clicks "Update now"; that run passes --from-ui.
+# Runs as the GenQR service account, never as root: the service is restarted through a
+# sudoers rule (installed by install.sh) that allows only start/stop/restart of
+# genqr.service. Also started by systemd (genqr-update.path → genqr-update.service, running
+# as the service account) when an admin clicks "Update now"; that run passes --from-ui.
 #
-# Runs in two stages: stage 1 (this file as it was before the pull) fetches, backs up and
+# Two stages: stage 1 (this file as it was before the pull) fetches, backs up and
 # fast-forwards; it then re-executes the *newly pulled* update.sh with --continue, so
 # build/migrate/restart steps always come from the version being installed.
 set -Eeuo pipefail
@@ -24,35 +26,39 @@ for arg in "$@"; do
     --force) FORCE=1 ;;
     --from-ui) ;;
     --continue) CONTINUE=1 ;;
-    -h | --help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "Unknown option: $arg" ;;
   esac
 done
 
-[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+APP_USER="$(app_user)"
+# Started as root by hand: drop to the service account. (Stage 2 may still arrive as root
+# from the updater of older versions; it then only uses root to restart the service.)
+if [ "$(id -u)" -eq 0 ] && [ "$CONTINUE" -eq 0 ]; then
+  exec runuser -u "$APP_USER" -- env HOME="$GENQR_DIR" "$0" "$@"
+fi
 
 DATA="$GENQR_DIR/data"
 LOGS="$GENQR_DIR/logs"
 REQUEST="$DATA/update.request"
 STATUS="$DATA/update-status.json"
 LOG="$LOGS/update.log"
-APP_USER="$(app_user)"
 
 # State handed from stage 1 to stage 2.
 OLD_COMMIT="${GENQR_UPDATE_OLD:-}"
 NEW_COMMIT="${GENQR_UPDATE_NEW:-}"
 BACKUP="${GENQR_UPDATE_BACKUP:-}"
 REQUESTED_BY="${GENQR_UPDATE_BY:-cli:${SUDO_USER:-$(id -un)}}"
+REQUESTED_BY="${REQUESTED_BY//[^A-Za-z0-9._:@-]/}"
 
 log() { echo "[$(date '+%F %T')] $*"; }
 
+# Written as the service account, via a temp file, so no other user can redirect the write.
 write_status() {
   local msg="${2//\"/\'}"
   printf '{"state":"%s","message":"%s","requestedBy":"%s","fromCommit":"%s","toCommit":"%s","at":"%s"}\n' \
-    "$1" "$msg" "$REQUESTED_BY" "$OLD_COMMIT" "$NEW_COMMIT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS.tmp"
-  chown "$APP_USER:" "$STATUS.tmp"
-  chmod 640 "$STATUS.tmp"
-  mv -f "$STATUS.tmp" "$STATUS"
+    "$1" "$msg" "$REQUESTED_BY" "$OLD_COMMIT" "$NEW_COMMIT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" |
+    as_app sh -c 'umask 027; cat > "$1.tmp" && mv -f "$1.tmp" "$1"' _ "$STATUS"
 }
 
 fail() {
@@ -68,7 +74,7 @@ rollback() {
   log "ERROR: $reason"
   log "Rolling back to ${OLD_COMMIT:0:7}"
   write_status running "Rolling back: $reason"
-  systemctl stop "$GENQR_SERVICE" || true
+  service_ctl stop || true
   # Undo this update's migrations while the new code (which knows how) is still in place.
   if [ "${MIGRATED:-0}" -eq 1 ] && [ ! -f "$BACKUP/genqr.db" ]; then
     as_app node server/dist/cli/index.js migrate-rollback || log "Undoing the migrations failed"
@@ -82,12 +88,10 @@ rollback() {
   if [ -f "$BACKUP/genqr.db" ]; then
     local dbfile; dbfile="$(sqlite_file)"
     log "Restoring database from $BACKUP/genqr.db"
-    rm -f "$dbfile-wal" "$dbfile-shm"
-    cp -f "$BACKUP/genqr.db" "$dbfile"
-    chown "$APP_USER:" "$dbfile"
+    as_app rm -f "$dbfile-wal" "$dbfile-shm"
+    as_app cp -f "$BACKUP/genqr.db" "$dbfile"
   fi
-  install_units || true
-  systemctl start "$GENQR_SERVICE" || true
+  service_ctl start || true
   if wait_healthy "$OLD_COMMIT"; then
     write_status failed "$reason. Rolled back to ${OLD_COMMIT:0:7}."
   else
@@ -115,22 +119,26 @@ if [ "$CONTINUE" -eq 1 ]; then
   MIGRATE_OUT="$(as_app node server/dist/cli/index.js migrate)"
   echo "$MIGRATE_OUT"
   if [[ "$MIGRATE_OUT" == *"Applied migrations"* ]]; then MIGRATED=1; fi
-
-  log "Updating systemd units and file permissions"
-  install_units
   secure_files
 
   log "Restarting $GENQR_SERVICE"
   write_status running "Restarting"
-  systemctl restart "$GENQR_SERVICE"
+  service_ctl restart
   wait_healthy "$NEW_COMMIT" || rollback "The new version did not become healthy"
 
   trap - ERR
+  DONE="Updated to ${NEW_COMMIT:0:7}"
+  # Service definitions, sudoers and genqrctl are installed by root from install.sh, never
+  # from this (service-owned) folder. Tell the admin when they changed.
+  if ! as_app git diff --quiet "$OLD_COMMIT" "$NEW_COMMIT" -- scripts/install.sh scripts/genqrctl 2> /dev/null; then
+    DONE="$DONE. System files changed: re-run the installer (curl … install.sh | sudo bash) to apply them."
+    log "NOTE: this version changes the installer or genqrctl. Apply with: curl -fsSL https://raw.githubusercontent.com/revul93/GenQR/main/scripts/install.sh | sudo bash"
+  fi
   log "Update complete: now on ${NEW_COMMIT:0:7}"
-  write_status success "Updated to ${NEW_COMMIT:0:7}"
+  write_status success "$DONE"
 
   # Keep the 10 most recent backups.
-  ls -1dt "$GENQR_DIR"/backups/*/ 2> /dev/null | tail -n +11 | xargs -r rm -rf || true
+  as_app sh -c 'ls -1dt backups/*/ 2> /dev/null | tail -n +11 | xargs -r rm -rf' || true
   exit 0
 fi
 
@@ -138,22 +146,22 @@ fi
 # Stage 1: check, back up, pull.
 # ---------------------------------------------------------------------------------
 mkdir -p "$DATA" "$LOGS" "$GENQR_DIR/backups"
-chown "$APP_USER:" "$DATA" "$LOGS" "$GENQR_DIR/backups"
+# Older versions ran this as root and left root-owned files behind; the service account
+# owns these folders, so it can replace them.
+for f in "$DATA/update.lock" "$STATUS" "$LOG"; do [ ! -e "$f" ] || [ -w "$f" ] || rm -f "$f"; done
 
 # Only one update at a time. The lock (fd 9) is inherited by stage 2.
 exec 9> "$DATA/update.lock"
 flock -n 9 || die "Another update is already running."
 
 if [ -f "$REQUEST" ]; then
-  REQUESTED_BY="$(sed -n 's/.*"requestedBy":"\([^"]*\)".*/\1/p' "$REQUEST")"
+  REQUESTED_BY="$(sed -n 's/.*"requestedBy":"\([^"]*\)".*/\1/p' "$REQUEST" | tr -cd 'A-Za-z0-9._:@-')"
   rm -f "$REQUEST"
 fi
 
 # Keep the previous log, then mirror everything to the new one (the web UI tails it).
 [ -f "$LOG" ] && mv -f "$LOG" "$LOG.1"
-: > "$LOG"
-chown "$APP_USER:" "$LOG"
-chmod 640 "$LOG"
+(umask 027; : > "$LOG")
 exec > >(tee -a "$LOG") 2>&1
 
 trap 'fail "Update step failed (line $LINENO)"' ERR
@@ -183,14 +191,12 @@ BACKUP="$GENQR_DIR/backups/$(date +%Y%m%d-%H%M%S)-${OLD_COMMIT:0:7}"
 log "Backing up configuration and database to $BACKUP"
 write_status running "Backing up"
 as_app mkdir -p "$BACKUP"
-cp -a "$GENQR_DIR/.env" "$GENQR_DIR/config" "$BACKUP/" 2> /dev/null || true
+as_app cp -a .env config "$BACKUP/" 2> /dev/null || true
 DB_CLIENT="$(db_client)"
 if [ "$DB_CLIENT" = "sqlite" ]; then
   as_app node server/dist/cli/index.js backup "$BACKUP/genqr.db"
-elif as_app node server/dist/cli/index.js help | grep -q 'json.gz'; then
-  as_app node server/dist/cli/index.js backup "$BACKUP/genqr-dump.json.gz"
 else
-  warn "This version cannot back up $DB_CLIENT databases; make sure your own database backups are current."
+  as_app node server/dist/cli/index.js backup "$BACKUP/genqr-dump.json.gz"
 fi
 
 trap 'rollback "Update step failed (line $LINENO)"' ERR

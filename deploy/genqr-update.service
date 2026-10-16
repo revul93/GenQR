@@ -1,8 +1,0 @@
-# One-shot privileged update job, triggered by genqr-update.path. Runs as root so it can
-# restart genqr.service; git/npm steps drop to the service user inside update.sh.
-[Unit]
-Description=GenQR update job
-
-[Service]
-Type=oneshot
-ExecStart=@GENQR_DIR@/scripts/update.sh --from-ui

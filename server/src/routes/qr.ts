@@ -42,7 +42,7 @@ async function checkLogo(input: { logoId: number | null }, req: Request) {
 
 // --- Designer support ---------------------------------------------------------------
 
-qrRouter.post('/preview', async (req, res) => {
+qrRouter.post('/preview', rateLimit({ windowMs: 60 * 1000, limit: 120, keyGenerator: (req) => `user:${req.user?.id}` }), async (req, res) => {
   const body = parseBody(previewSchema, req.body);
   await checkLogo(body, req);
   // URL codes encode a short link; the preview uses one of the same length.

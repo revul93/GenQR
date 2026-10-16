@@ -1,4 +1,4 @@
-# Shared helpers for install.sh, update.sh and genqrctl. Source it after setting GENQR_DIR.
+# Helpers for update.sh, which runs as the GenQR service account (never as root).
 # shellcheck shell=bash
 
 GENQR_SERVICE="genqr"
@@ -10,13 +10,24 @@ die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
 # Owner of the install directory = the service account.
 app_user() { stat -c %U "$GENQR_DIR"; }
 
-# Run a command as the service account from the install directory.
+# Runs a command from the install directory with the app's environment. Under the legacy
+# root-run updater (versions before 2026-10) it drops to the service account.
 as_app() {
   local user; user="$(app_user)"
   if [ "$(id -un)" = "$user" ]; then
-    (cd "$GENQR_DIR" && GENQR_ROOT="$GENQR_DIR" "$@")
+    (cd "$GENQR_DIR" && HOME="$GENQR_DIR" GENQR_ROOT="$GENQR_DIR" NODE_ENV=production "$@")
   else
     (cd "$GENQR_DIR" && runuser -u "$user" -- env HOME="$GENQR_DIR" GENQR_ROOT="$GENQR_DIR" NODE_ENV=production "$@")
+  fi
+}
+
+# Starts/stops/restarts the service: directly as root, otherwise through the sudoers rule
+# that install.sh grants the service account for exactly these three commands.
+service_ctl() {
+  if [ "$(id -u)" -eq 0 ]; then
+    systemctl "$1" "$GENQR_SERVICE"
+  else
+    sudo -n "$(command -v systemctl)" "$1" "$GENQR_SERVICE.service"
   fi
 }
 
@@ -30,15 +41,15 @@ build_app() {
 secure_files() {
   local d
   for d in data logs backups config; do
-    [ -d "$GENQR_DIR/$d" ] && chmod -R o-rwx,g-w "$GENQR_DIR/$d"
+    [ -d "$GENQR_DIR/$d" ] && as_app chmod -R o-rwx,g-w "$GENQR_DIR/$d"
   done
-  [ -f "$GENQR_DIR/.env" ] && chmod 600 "$GENQR_DIR/.env"
+  [ -f "$GENQR_DIR/.env" ] && as_app chmod 600 "$GENQR_DIR/.env"
   return 0
 }
 
 read_port() {
   local port
-  port="$(sed -n 's/^PORT=//p' "$GENQR_DIR/.env" 2>/dev/null | tail -n1)"
+  port="$(sed -n 's/^PORT=//p' "$GENQR_DIR/.env" 2> /dev/null | tail -n1 | tr -dc '0-9')"
   echo "${port:-3000}"
 }
 
@@ -60,24 +71,10 @@ wait_healthy() {
   local expect="${1:-}" port body i
   port="$(read_port)"
   for i in $(seq 1 60); do
-    if body="$(curl -fsS --max-time 3 "http://127.0.0.1:${port}/api/health" 2>/dev/null)"; then
+    if body="$(curl -fsS --max-time 3 "http://127.0.0.1:${port}/api/health" 2> /dev/null)"; then
       if [ -z "$expect" ] || [[ "$body" == *"\"commit\":\"$expect\""* ]]; then return 0; fi
     fi
     sleep 2
   done
   return 1
-}
-
-# Render deploy/*.service|*.path templates into /etc/systemd/system.
-install_units() {
-  local node_bin unit user
-  node_bin="$(command -v node)"
-  user="$(app_user)"
-  for unit in genqr.service genqr-update.service genqr-update.path; do
-    sed -e "s|@GENQR_DIR@|$GENQR_DIR|g" -e "s|@NODE_BIN@|$node_bin|g" -e "s|@GENQR_USER@|$user|g" \
-      "$GENQR_DIR/deploy/$unit" > "/etc/systemd/system/$unit"
-  done
-  chmod +x "$GENQR_DIR/scripts/update.sh" "$GENQR_DIR/scripts/genqrctl"
-  ln -sf "$GENQR_DIR/scripts/genqrctl" /usr/local/bin/genqrctl
-  systemctl daemon-reload
 }

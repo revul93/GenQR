@@ -219,6 +219,14 @@ export async function testAdConfig(cfg: AdConfig, bindPasswordOverride: string |
   const steps: AdTestResult['steps'] = [];
   const record = (name: string, ok: boolean, detail: string) => steps.push({ name, ok, detail });
   try {
+    if (!bindPasswordOverride) {
+      // The saved password may only go to the saved servers/account; otherwise an admin could
+      // point the test at their own host and capture the service-account password.
+      const saved = await getAdConfig();
+      if (saved.bindDn !== cfg.bindDn || saved.urls.join(',') !== cfg.urls.join(',')) {
+        throw new HttpError(400, 'The server or service account changed: type the bind password again to test.', 'PASSWORD_REQUIRED');
+      }
+    }
     const password = await resolveBindPassword(bindPasswordOverride);
     await withServiceBind(cfg, password, async (client) => {
       record('Connect and bind as service account', true, `Bound as ${cfg.bindDn}`);
