@@ -78,7 +78,7 @@ export function readUpdateStatus(): UpdateStatus {
 
 export function isUpdateInProgress(): boolean {
   const { state } = readUpdateStatus();
-  return fs.existsSync(UPDATE_REQUEST_FILE) || state === 'running';
+  return fs.existsSync(UPDATE_REQUEST_FILE) || fs.existsSync(UPDATE_REQUEST_FILE + '.processing') || state === 'running';
 }
 
 export function requestUpdate(requestedBy: string): void {

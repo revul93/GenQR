@@ -136,6 +136,8 @@ User=$GENQR_USER
 Group=$GENQR_USER
 WorkingDirectory=$GENQR_DIR
 Environment=HOME=$GENQR_DIR
+# Claim the request first: a failing job must not leave it behind and be re-triggered.
+ExecStartPre=/bin/mv -f $GENQR_DIR/data/update.request $GENQR_DIR/data/update.request.processing
 ExecStart=$GENQR_DIR/scripts/update.sh --from-ui
 EOF
 
@@ -173,13 +175,15 @@ if [ -d "$GENQR_DIR/.git" ]; then
   for f in "$GENQR_DIR/data/update.lock" "$GENQR_DIR/data/update-status.json" "$GENQR_DIR/logs/update.log"; do
     [ -e "$f" ] && chown "$GENQR_USER:" "$f"
   done
-  systemctl enable --now genqr-update.path > /dev/null 2>&1
-
   # Bring the code to the latest version first, so the updater that runs next is the
   # current one (older updaters expected to run as root).
   info "Updating GenQR"
   as_app git fetch --quiet origin "$GENQR_BRANCH" || die "Could not fetch from $GENQR_REPO."
   as_app git merge --quiet --ff-only "origin/$GENQR_BRANCH" || die "Local changes in $GENQR_DIR prevent updating; inspect with: git -C $GENQR_DIR status"
+  # Only now (code current) start watching for "Update now" requests.
+  systemctl reset-failed genqr-update.path genqr-update.service > /dev/null 2>&1 || true
+  systemctl enable genqr-update.path > /dev/null 2>&1
+  systemctl restart genqr-update.path
   trap - ERR
   # --force: rebuild, migrate and restart on the code just pulled (it backs up the database first).
   exec runuser -u "$GENQR_USER" -- env HOME="$GENQR_DIR" "$GENQR_DIR/scripts/update.sh" --force

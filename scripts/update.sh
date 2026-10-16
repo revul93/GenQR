@@ -154,10 +154,13 @@ for f in "$DATA/update.lock" "$STATUS" "$LOG"; do [ ! -e "$f" ] || [ -w "$f" ] |
 exec 9> "$DATA/update.lock"
 flock -n 9 || die "Another update is already running."
 
-if [ -f "$REQUEST" ]; then
-  REQUESTED_BY="$(sed -n 's/.*"requestedBy":"\([^"]*\)".*/\1/p' "$REQUEST" | tr -cd 'A-Za-z0-9._:@-')"
-  rm -f "$REQUEST"
-fi
+# The systemd job renames the request before starting us (see install.sh).
+for req in "$REQUEST.processing" "$REQUEST"; do
+  if [ -f "$req" ]; then
+    REQUESTED_BY="$(sed -n 's/.*"requestedBy":"\([^"]*\)".*/\1/p' "$req" | tr -cd 'A-Za-z0-9._:@-')"
+    rm -f "$req"
+  fi
+done
 
 # Keep the previous log, then mirror everything to the new one (the web UI tails it).
 [ -f "$LOG" ] && mv -f "$LOG" "$LOG.1"
