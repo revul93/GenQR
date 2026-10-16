@@ -105,7 +105,7 @@ docker run -d --name genqr --restart unless-stopped -p 3000:3000   -e ENCRYPTION
 - **PostgreSQL / MySQL** drivers are built into the image. `docker compose --profile postgres up -d` also starts a PostgreSQL container: switch to it in Settings → Database (host `postgres`).
 - **Behind a reverse-proxy container**, GenQR trusts `X-Forwarded-*` headers from private networks (`TRUST_PROXY` in the image).
 - **Hardening:** the image runs as the unprivileged `node` user, and the application code is read-only to it.
-- **Registry access:** the GitHub Container Registry package is private by default. Either make it public (GitHub → your profile → Packages → genqr → Package settings → Change visibility) or log in before pulling: `docker login ghcr.io`, using a token with `read:packages`.
+- **Registry access:** the image is public (it follows the GitHub repository's visibility), so `docker pull ghcr.io/revul93/genqr` needs no login. If you make the repository or package private, log in first with `docker login ghcr.io`, using a token with `read:packages`.
 - **Docker Hub:** to also publish there, add the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. The workflow then pushes `<username>/genqr` as well.
 
 ### Re-running the installer
