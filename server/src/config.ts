@@ -9,7 +9,9 @@ export const ROOT_DIR = process.env.GENQR_ROOT ? path.resolve(process.env.GENQR_
 export const DATA_DIR = path.join(ROOT_DIR, 'data');
 export const CONFIG_DIR = path.join(ROOT_DIR, 'config');
 export const LOG_DIR = path.join(ROOT_DIR, 'logs');
-export const DRIVERS_DIR = path.join(ROOT_DIR, 'drivers');
+// Admin tools on Windows point this at an admin-only folder, so code that runs as SYSTEM never
+// loads drivers from a folder the service account can write.
+export const DRIVERS_DIR = process.env.GENQR_DRIVERS_DIR ? path.resolve(process.env.GENQR_DRIVERS_DIR) : path.join(ROOT_DIR, 'drivers');
 export const CLIENT_DIST_DIR = path.join(ROOT_DIR, 'client', 'dist');
 
 const envFile = path.join(ROOT_DIR, '.env');

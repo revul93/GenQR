@@ -201,7 +201,7 @@ export function DatabaseSettings() {
         )}
 
         {client === 'sqlite' ? (
-          <TextField label="Database file" value={form.filename} onChange={(e) => set({ filename: e.target.value })} helperText="Relative to the GenQR folder. Must be a new file." />
+          <TextField label="Database file" value={form.filename} onChange={(e) => set({ filename: e.target.value })} helperText="A new file in the data folder, e.g. data/genqr-new.db." />
         ) : (
           <>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>

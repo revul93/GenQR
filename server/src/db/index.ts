@@ -94,6 +94,9 @@ function serverConnection(client: Exclude<DbClient, 'sqlite'>, c: ServerConnecti
 export function buildKnexConfig(cfg: DbConfig, passwordOverride?: string): Knex.Config {
   if (cfg.client === 'sqlite') {
     const filename = path.resolve(ROOT_DIR, String(cfg.connection.filename ?? 'data/genqr.db'));
+    // config/database.json is writable by the service account; keeping the file inside data/
+    // stops it from pointing privileged tools (backup/restore/updater) at other files.
+    if (path.dirname(filename) !== path.resolve(DATA_DIR)) throw new Error(`The SQLite database must be a file directly inside ${DATA_DIR} (got ${filename}).`);
     ensureDir(path.dirname(filename));
     return {
       client: KNEX_CLIENTS.sqlite,

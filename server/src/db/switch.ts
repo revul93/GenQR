@@ -15,7 +15,13 @@ import { assertEmpty, copyDatabase, dropAppTables } from './transfer.js';
  */
 
 export const switchTargetSchema = z.discriminatedUnion('client', [
-  z.object({ client: z.literal('sqlite'), filename: z.string().trim().min(1).max(500).regex(/\.db$/i, 'Use a file name ending in .db') }),
+  z.object({
+    client: z.literal('sqlite'),
+    filename: z
+      .string()
+      .trim()
+      .regex(/^data[\\/][A-Za-z0-9._-]+\.db$/, 'Use a file inside the data folder, e.g. data/genqr-new.db'),
+  }),
   z.object({
     // SQL Server support is implemented (Knex 'mssql' dialect, tedious driver) but not yet
     // verified against a real server, so it is not offered yet.

@@ -16,8 +16,7 @@ afterAll(stopApp);
 
 describe('copying between databases', () => {
   it('copies every table to an empty SQLite database with identical counts', async () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'genqr-copy-')), 'copy.db');
-    const target = createKnex({ client: 'sqlite', connection: { filename: file } });
+    const target = createKnex({ client: 'sqlite', connection: { filename: 'data/copy.db' } });
     try {
       await migrateLatest(target);
       await copyDatabase(db(), target, 'sqlite', () => {});
@@ -30,6 +29,13 @@ describe('copying between databases', () => {
     } finally {
       await target.destroy();
     }
+  });
+});
+
+describe('SQLite location', () => {
+  it('refuses database files outside the data folder', () => {
+    expect(() => createKnex({ client: 'sqlite', connection: { filename: path.join(os.tmpdir(), 'elsewhere.db') } })).toThrow(/inside/);
+    expect(() => createKnex({ client: 'sqlite', connection: { filename: 'data/../config/x.db' } })).toThrow(/inside/);
   });
 });
 

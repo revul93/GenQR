@@ -3,13 +3,23 @@
 Branded QR code generator with editable short links and click analytics. Users sign in with local accounts or Active Directory.
 Built with Node.js, React and Knex. It starts on SQLite and can move to PostgreSQL or MySQL/MariaDB from the admin settings. See [PLAN.md](PLAN.md) for the full design and roadmap.
 
-## Install (Linux)
+## Install
+
+**Linux:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/revul93/GenQR/main/scripts/install.sh | sudo bash
 ```
 
-The installer:
+**Windows** (elevated PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/revul93/GenQR/main/scripts/install.ps1 | iex
+```
+
+The **[administrator guide](docs/ADMIN.md)** covers HTTPS, Active Directory, email, databases, backups, updates, security and troubleshooting.
+
+The Linux installer:
 - installs git, build tools and Node.js 22 if they are missing
 - creates the `genqr` service account and clones the repo into `/opt/genqr`
 - builds the app, generates `.env` and creates the database
@@ -39,6 +49,14 @@ For production, put a reverse proxy with HTTPS in front of the app; [deploy/ngin
 Admins can also update from **Admin → System → Update now**. That button drops a request file, and the `genqr-update.path` systemd unit picks it up and runs the same update script.
 
 Local files are never tracked by git: `.env`, `config/database.json`, `data/`, `logs/`, `backups/` and `drivers/`. That is why `git pull` updates never conflict with your local configuration.
+
+## Tests
+
+```bash
+npm test
+```
+
+This runs the API and unit test suite (Vitest + Supertest) on a temporary SQLite database. To run it against PostgreSQL or MySQL, set `GENQR_TEST_DB`; see `server/test/setup.ts`. GitHub Actions runs the suite on SQLite, PostgreSQL and MariaDB for every push.
 
 ## Development
 

@@ -341,6 +341,20 @@ GenQR/
 - **SQL Server** is implemented (Knex `mssql`/tedious, identity inserts, parameter limits) but hidden until it has been tested against a real server.
 - **Not yet exercised:** the updater's non-SQLite rollback (undoing migrations and restoring the dump).
 
+**Phase 8 status:** done, except a real run of the Windows installer (see below).
+- **Security review:** an independent code review found one High issue: the root-run updater could be abused by the service account. It is fixed: updates now run as the service account, and root never sources or runs app-owned files. The Medium/Low issues are fixed too:
+  - lockout reset after expiry
+  - test buttons no longer send saved secrets to a new host
+  - repeat-click deduplication
+  - preview rate limit
+  - health endpoint details only for local callers
+  - reset links revoked after admin resets
+  - the SQLite file is confined to `data/`
+- **Windows:** `install.ps1`, `update.ps1` and `genqrctl.ps1`. An NSSM service runs as LocalService with read-only access to the code; a SYSTEM scheduled task handles "Update now"; admin tools use an admin-only drivers folder. The scripts parse cleanly under Windows PowerShell 5.1 but **have not yet been run on a Windows server**.
+- **Update rollback on PostgreSQL**, verified with a deliberately broken release on Kali WSL: the new migration was undone, the dump restored and the old version came back healthy. Also verified: the upgrade from the old root-run updater, the sudoers boundary, and "Update now" via systemd running as the service account.
+- **Automated tests:** 53 Vitest/Supertest tests, passing on SQLite, PostgreSQL 18 and MariaDB 11.8. GitHub Actions runs all three engines on every push.
+- **Docs:** [docs/ADMIN.md](docs/ADMIN.md), the administrator guide.
+
 Phase 7 comes late on purpose. Because Knex is used from day one and the tests run on all engines, the code is portable from the start. Only the switch wizard itself waits.
 
 ## 14. Remaining Open Questions

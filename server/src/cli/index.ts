@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { env } from '../config.js';
+import { DATA_DIR, env, ROOT_DIR } from '../config.js';
 import { closeDb, db, describeDbConfig, initDb, loadDbConfig, migrateLatest, migrateRollback } from '../db/index.js';
 import { driverState, installDriver } from '../db/drivers.js';
 import { configFor, runSwitch, switchTargetSchema, testTarget } from '../db/switch.js';
@@ -128,7 +128,8 @@ async function restore(args: string[]): Promise<void> {
   } else {
     if (cfg.client !== 'sqlite') throw new CliError('Only .json.gz dumps can be restored into a non-SQLite database.');
     const fs = await import('node:fs');
-    const dbFile = path.resolve(String(cfg.connection.filename));
+    const dbFile = path.resolve(ROOT_DIR, String(cfg.connection.filename));
+    if (path.dirname(dbFile) !== path.resolve(DATA_DIR)) throw new CliError('The SQLite database must be inside the data folder.');
     for (const suffix of ['-wal', '-shm']) fs.rmSync(dbFile + suffix, { force: true });
     fs.copyFileSync(file, dbFile);
   }

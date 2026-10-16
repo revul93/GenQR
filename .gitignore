@@ -32,3 +32,6 @@ Thumbs.db
 # npm cache when the service user's HOME is the install dir
 .npm/
 .cache/
+
+# Windows: nssm.exe and the genqrctl.cmd wrapper, created by install.ps1
+bin/
