@@ -13,6 +13,8 @@ ARG NODE_IMAGE=node:22-bookworm-slim
 
 # --- Build: install everything, compile the server, bundle the client --------------------
 FROM ${NODE_IMAGE} AS build
+# Native modules (better-sqlite3, argon2) compile from source when no prebuilt binary matches.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY server/package.json server/
@@ -23,6 +25,8 @@ RUN npm run build
 
 # --- Runtime dependencies: server only, no dev tools; plus the pinned database drivers ----
 FROM ${NODE_IMAGE} AS deps
+# Native modules (better-sqlite3, argon2) compile from source when no prebuilt binary matches.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/
